@@ -25,7 +25,7 @@ from .filters import MultichannelFilter
 logger = logging.getLogger("pieeg.server")
 
 DEFAULT_HOST = "0.0.0.0"
-DEFAULT_PORT = 8765
+DEFAULT_PORT = 1616  # PiEEG-16 → 1616
 
 
 class PiEEGServer:

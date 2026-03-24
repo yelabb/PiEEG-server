@@ -2,7 +2,11 @@
 
 **One command. Plug and play. 16-channel EEG streaming.**
 
-A single command that initializes the hardware, reads 16 channels at 250 Hz, and streams live data over WebSocket to any device on your local network.
+A single command that initializes the hardware, reads 16 channels at 250 Hz, streams live data over WebSocket, and serves a real-time dashboard — all on your local network.
+
+**Ports:**
+- **`:1616`** — WebSocket data stream (PiEEG-**16** → **1616**)
+- **`:1617`** — Web dashboard (next door)
 
 ## Quick Start
 
@@ -22,7 +26,9 @@ sudo reboot   # only needed first time, to enable SPI
 pieeg-server
 ```
 
-That's it. LEDs turn on, data streams to `ws://raspberrypi.local:8765`.
+That's it. LEDs turn on, data streams to `ws://raspberrypi.local:1616`.
+
+Open **http://raspberrypi.local:1617** in any browser on your network for the real-time dashboard.
 
 ## Connect from any device
 
@@ -32,7 +38,7 @@ That's it. LEDs turn on, data streams to `ws://raspberrypi.local:8765`.
 import asyncio, json, websockets
 
 async def main():
-    async with websockets.connect("ws://raspberrypi.local:8765") as ws:
+    async with websockets.connect("ws://raspberrypi.local:1616") as ws:
         async for message in ws:
             frame = json.loads(message)
             print(f"Sample #{frame['n']}: {frame['channels']}")
@@ -43,7 +49,7 @@ asyncio.run(main())
 ### JavaScript (browser)
 
 ```javascript
-const ws = new WebSocket("ws://raspberrypi.local:8765");
+const ws = new WebSocket("ws://raspberrypi.local:1616");
 ws.onmessage = (event) => {
     const frame = JSON.parse(event.data);
     console.log(`Sample #${frame.n}:`, frame.channels);
@@ -73,13 +79,15 @@ Each WebSocket message is a JSON frame:
 ```
 pieeg-server [OPTIONS]
 
-  --host HOST       Bind address (default: 0.0.0.0)
-  --port PORT       WebSocket port (default: 8765)
-  --gpio-chip NAME  GPIO chip for gpiod (default: "0")
-  --filter          Enable 1–40 Hz bandpass filter server-side
-  --lowcut HZ       Filter low cutoff (default: 1.0)
-  --highcut HZ      Filter high cutoff (default: 40.0)
-  -v, --verbose     Debug logging
+  --host HOST            Bind address (default: 0.0.0.0)
+  --port PORT            WebSocket port (default: 1616)
+  --dashboard-port PORT  Dashboard HTTP port (default: 1617)
+  --no-dashboard         Disable the web dashboard
+  --gpio-chip NAME       GPIO chip for gpiod (default: "0")
+  --filter               Enable 1–40 Hz bandpass filter server-side
+  --lowcut HZ            Filter low cutoff (default: 1.0)
+  --highcut HZ           Filter high cutoff (default: 40.0)
+  -v, --verbose          Debug logging
 ```
 
 ## Runtime Commands
@@ -103,7 +111,9 @@ Clients can send JSON commands over the WebSocket:
 │       ↓                                                  │
 │  server.py       → WebSocket broadcast to all clients    │
 │       ↓                                                  │
-│  ws://0.0.0.0:8765                                       │
+│  dashboard.py    → HTTP server for real-time web UI       │
+│       ↓                                                  │
+│  ws://0.0.0.0:1616  │  http://0.0.0.0:1617              │
 └──────────┬───────────────────────────────────────────────┘
            │  Local network
            ├── Browser (JS client)

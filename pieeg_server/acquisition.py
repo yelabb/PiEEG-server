@@ -10,8 +10,6 @@ import asyncio
 import threading
 import time
 
-from .hardware import PiEEGHardware
-
 NUM_CHANNELS = 16
 SAMPLE_RATE = 250  # Hz
 SAMPLE_INTERVAL = 1.0 / SAMPLE_RATE  # 4 ms
@@ -20,9 +18,10 @@ SAMPLE_INTERVAL = 1.0 / SAMPLE_RATE  # 4 ms
 class AcquisitionLoop:
     """Runs the SPI read loop in a background thread, feeds an async queue."""
 
-    def __init__(self, hardware: PiEEGHardware, loop: asyncio.AbstractEventLoop):
+    def __init__(self, hardware, loop: asyncio.AbstractEventLoop, mock: bool = False):
         self._hw = hardware
         self._loop = loop
+        self._mock = mock
         self._queue: asyncio.Queue = asyncio.Queue(maxsize=2048)
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
@@ -49,6 +48,25 @@ class AcquisitionLoop:
             self._thread.join(timeout=2.0)
 
     def _run(self):
+        if self._mock:
+            self._run_mock()
+        else:
+            self._run_hardware()
+
+    def _run_mock(self):
+        """Generate synthetic data at 250 Hz for testing without hardware."""
+        while not self._stop_event.is_set():
+            sample = self._hw.read_sample()
+            self._sample_count += 1
+            frame = {
+                "t": round(time.time(), 6),
+                "n": self._sample_count,
+                "channels": sample,
+            }
+            self._loop.call_soon_threadsafe(self._enqueue, frame)
+            time.sleep(SAMPLE_INTERVAL)
+
+    def _run_hardware(self):
         """
         Tight loop: poll DRDY, read sample, push to async queue.
 

@@ -11,9 +11,9 @@ import logging
 import signal
 import sys
 
-from .hardware import PiEEGHardware
 from .acquisition import AcquisitionLoop
 from .server import PiEEGServer, DEFAULT_HOST, DEFAULT_PORT
+from .dashboard import DashboardServer, DEFAULT_DASHBOARD_PORT
 
 
 def parse_args():
@@ -27,7 +27,15 @@ def parse_args():
     )
     p.add_argument(
         "--port", type=int, default=DEFAULT_PORT,
-        help="WebSocket port (default: 8765)",
+        help="WebSocket port (default: 1616)",
+    )
+    p.add_argument(
+        "--dashboard-port", type=int, default=DEFAULT_DASHBOARD_PORT,
+        help="Dashboard HTTP port (default: 1617)",
+    )
+    p.add_argument(
+        "--no-dashboard", action="store_true",
+        help="Disable the web dashboard",
     )
     p.add_argument(
         "--gpio-chip", default="0",
@@ -49,6 +57,10 @@ def parse_args():
         "--verbose", "-v", action="store_true",
         help="Enable debug logging",
     )
+    p.add_argument(
+        "--mock", action="store_true",
+        help="Use synthetic EEG data (no hardware needed, for testing)",
+    )
     return p.parse_args()
 
 
@@ -63,17 +75,24 @@ def main():
     logger = logging.getLogger("pieeg")
 
     # --- Hardware ---
-    logger.info("Initializing PiEEG-16 hardware (GPIO chip: %s)...", args.gpio_chip)
-    hw = PiEEGHardware(gpio_chip=args.gpio_chip)
+    if args.mock:
+        from .mock import MockHardware
+        logger.info("Starting in MOCK mode (synthetic EEG data)")
+        hw = MockHardware()
+    else:
+        from .hardware import PiEEGHardware
+        logger.info("Initializing PiEEG-16 hardware (GPIO chip: %s)...", args.gpio_chip)
+        hw = PiEEGHardware(gpio_chip=args.gpio_chip)
     hw.open()
-    logger.info("Hardware initialized — ADCs configured, LEDs should be ON")
+    if not args.mock:
+        logger.info("Hardware initialized — ADCs configured, LEDs should be ON")
 
     # --- Acquisition ---
     loop = asyncio.new_event_loop()
 
-    acq = AcquisitionLoop(hw, loop)
+    acq = AcquisitionLoop(hw, loop, mock=args.mock)
     acq.start()
-    logger.info("Acquisition started (250 Hz, 16 channels)")
+    logger.info("Acquisition started (250 Hz, 16 channels%s)", " — MOCK" if args.mock else "")
 
     # --- Server ---
     server = PiEEGServer(acq, host=args.host, port=args.port)
@@ -81,9 +100,17 @@ def main():
         server.enable_filter(args.lowcut, args.highcut)
         logger.info("Server-side filter: %.1f–%.1f Hz", args.lowcut, args.highcut)
 
+    # --- Dashboard ---
+    dashboard = None
+    if not args.no_dashboard:
+        dashboard = DashboardServer(host=args.host, port=args.dashboard_port)
+        dashboard.start()
+
     # --- Graceful shutdown ---
     def shutdown(*_):
         logger.info("Shutting down...")
+        if dashboard:
+            dashboard.stop()
         acq.stop()
         hw.close()
         loop.stop()
@@ -93,11 +120,10 @@ def main():
     signal.signal(signal.SIGTERM, shutdown)
 
     # --- Run ---
-    logger.info(
-        "PiEEG-16 server ready — ws://%s:%d",
-        args.host if args.host != "0.0.0.0" else "raspberrypi.local",
-        args.port,
-    )
+    display_host = args.host if args.host != "0.0.0.0" else "raspberrypi.local"
+    logger.info("PiEEG-16 server ready — ws://%s:%d", display_host, args.port)
+    if not args.no_dashboard:
+        logger.info("Dashboard — http://%s:%d", display_host, args.dashboard_port)
     loop.run_until_complete(server.run())
 
 
