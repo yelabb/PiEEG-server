@@ -1,52 +1,32 @@
 """
 Optional server-side Butterworth bandpass filter for EEG data.
 
-Ported from the original PiEEG-16 GUI scripts.
 Clients can request raw or filtered data via the WebSocket API.
 """
 
+import numpy as np
 from scipy import signal
-
-
-def butter_bandpass_coefficients(lowcut: float, highcut: float,
-                                  fs: float, order: int = 5):
-    """Compute Butterworth bandpass filter coefficients."""
-    nyq = 0.5 * fs
-    low = lowcut / nyq
-    high = highcut / nyq
-    b, a = signal.butter(order, [low, high], btype="band")
-    return b, a
 
 
 class BandpassFilter:
     """
     Stateful Butterworth bandpass filter for a single channel.
 
-    Maintains a running buffer so it can be applied incrementally
-    as new samples arrive in blocks.
+    Uses second-order sections (SOS) with persistent filter state
+    for numerically stable, efficient incremental filtering.
     """
 
     def __init__(self, lowcut: float = 1.0, highcut: float = 40.0,
-                 fs: float = 250.0, order: int = 5, buffer_size: int = 250):
-        self._b, self._a = butter_bandpass_coefficients(lowcut, highcut, fs, order)
-        self._buffer_size = buffer_size
-        self._buffer: list[float] = [0.0] * buffer_size
+                 fs: float = 250.0, order: int = 5):
+        self._sos = signal.butter(order, [lowcut, highcut], btype="band",
+                                  fs=fs, output="sos")
+        self._zi = signal.sosfilt_zi(self._sos) * 0.0
 
     def apply(self, new_samples: list[float]) -> list[float]:
-        """
-        Filter a block of new samples.
-
-        Prepends the internal buffer for continuity, applies the filter,
-        and returns only the newly-filtered portion.
-        """
-        combined = self._buffer + new_samples
-        filtered = signal.lfilter(self._b, self._a, combined).tolist()
-
-        # Update buffer with the tail of the combined data
-        self._buffer = combined[-self._buffer_size:]
-
-        # Return only the new portion
-        return filtered[len(combined) - len(new_samples):]
+        """Filter a block of new samples, carrying state across calls."""
+        x = np.asarray(new_samples, dtype=np.float64)
+        y, self._zi = signal.sosfilt(self._sos, x, zi=self._zi)
+        return y.tolist()
 
 
 class MultichannelFilter:
