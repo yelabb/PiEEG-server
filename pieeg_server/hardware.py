@@ -8,8 +8,12 @@ Requires: spidev, gpiod==1.5.4
 Must run on Raspberry Pi with SPI enabled and PiEEG-16 shield connected.
 """
 
+import logging
+
 import spidev
 import gpiod
+
+logger = logging.getLogger("pieeg.hardware")
 
 # --- ADC register addresses ---
 WHO_I_AM = 0x00
@@ -55,6 +59,9 @@ BYTES_PER_READ = 27  # 3 status + 8 channels * 3 bytes
 # --- Expected status header from ADC chip 2 ---
 EXPECTED_STATUS = (192, 0, 8)  # 0xC0, 0x00, 0x08
 
+# --- Spike detection (matches not_spike script) ---
+SPIKE_THRESHOLD = 5000  # max allowed jump in raw 24-bit signed value
+
 
 class PiEEGHardware:
     """Hardware abstraction for the PiEEG-16 shield."""
@@ -66,6 +73,8 @@ class PiEEGHardware:
         self._drdy_line = None
         self._spi1 = None
         self._spi2 = None
+        self._last_valid_value: int | None = None
+        self._spike_count = 0
 
     # --- lifecycle ---
 
@@ -112,6 +121,10 @@ class PiEEGHardware:
         raw2 = self._spi2.readbytes(BYTES_PER_READ)
         self._cs_line.set_value(1)
 
+        # Spike detection: check last channel of chip 2 (bytes 24-26)
+        if not self._is_valid_frame(raw2):
+            return None
+
         # Validate status bytes from chip 2
         if (raw2[0], raw2[1], raw2[2]) != EXPECTED_STATUS:
             return None
@@ -120,6 +133,29 @@ class PiEEGHardware:
         channels.extend(self._decode_channels(raw1))
         channels.extend(self._decode_channels(raw2))
         return channels
+
+    def _is_valid_frame(self, raw: list[int]) -> bool:
+        """Spike detection matching the original not_spike script.
+
+        Checks the last 3 bytes (bytes 24-26) of the SPI read as a signed
+        24-bit integer. If the jump from the previous valid value exceeds
+        SPIKE_THRESHOLD, the frame is considered corrupted.
+        """
+        combined = (raw[24] << 16) | (raw[25] << 8) | raw[26]
+        if raw[24] & 0x80:
+            combined -= 1 << 24
+
+        if self._last_valid_value is None:
+            self._last_valid_value = combined
+            return False  # first frame is always skipped, matching original
+
+        if abs(combined - self._last_valid_value) > SPIKE_THRESHOLD:
+            self._spike_count += 1
+            logger.debug("Spike detected (count: %d)", self._spike_count)
+            return False
+
+        self._last_valid_value = combined
+        return True
 
     def wait_for_drdy(self):
         """
