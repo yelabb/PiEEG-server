@@ -1,0 +1,110 @@
+"""
+Threaded data acquisition loop for PiEEG-16.
+
+Reads 16-channel samples at 250 Hz from the hardware layer
+and pushes timestamped frames into an asyncio-safe queue
+for downstream consumers (WebSocket server, file writer, etc.).
+"""
+
+import asyncio
+import threading
+import time
+
+from .hardware import PiEEGHardware
+
+NUM_CHANNELS = 16
+SAMPLE_RATE = 250  # Hz
+SAMPLE_INTERVAL = 1.0 / SAMPLE_RATE  # 4 ms
+
+
+class AcquisitionLoop:
+    """Runs the SPI read loop in a background thread, feeds an async queue."""
+
+    def __init__(self, hardware: PiEEGHardware, loop: asyncio.AbstractEventLoop):
+        self._hw = hardware
+        self._loop = loop
+        self._queue: asyncio.Queue = asyncio.Queue(maxsize=2048)
+        self._stop_event = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._sample_count = 0
+
+    @property
+    def queue(self) -> asyncio.Queue:
+        return self._queue
+
+    @property
+    def sample_count(self) -> int:
+        return self._sample_count
+
+    def start(self):
+        self._stop_event.clear()
+        self._thread = threading.Thread(
+            target=self._run, name="pieeg-acquisition", daemon=True
+        )
+        self._thread.start()
+
+    def stop(self):
+        self._stop_event.set()
+        if self._thread:
+            self._thread.join(timeout=2.0)
+
+    def _run(self):
+        """
+        Tight loop: poll DRDY, read sample, push to async queue.
+
+        The original PiEEG-16 code uses a polling state machine:
+        - Wait for DRDY pin to go HIGH (armed)
+        - Wait for DRDY pin to go LOW (data ready)
+        - Read SPI bytes
+
+        We replicate this exactly, with a small sleep to avoid
+        burning 100% CPU between polls.
+        """
+        armed = False
+
+        while not self._stop_event.is_set():
+            drdy = self._hw._drdy_line.get_value()
+
+            # Arm: wait for DRDY to go high
+            if not armed:
+                if drdy == 1:
+                    armed = True
+                else:
+                    time.sleep(0.0002)  # 200 µs
+                continue
+
+            # Trigger: DRDY goes low → data ready
+            if drdy != 0:
+                time.sleep(0.0001)  # 100 µs
+                continue
+
+            armed = False
+            sample = self._hw.read_sample()
+            if sample is None:
+                continue
+
+            self._sample_count += 1
+            timestamp = time.time()
+
+            frame = {
+                "t": round(timestamp, 6),
+                "n": self._sample_count,
+                "channels": sample,
+            }
+
+            # Non-blocking put into the asyncio queue from this thread
+            self._loop.call_soon_threadsafe(self._enqueue, frame)
+
+    def _enqueue(self, frame: dict):
+        try:
+            self._queue.put_nowait(frame)
+        except asyncio.QueueFull:
+            # Drop oldest frame to keep up with real-time
+            try:
+                self._queue.get_nowait()
+            except asyncio.QueueEmpty:
+                pass
+            try:
+                self._queue.put_nowait(frame)
+            except asyncio.QueueFull:
+                pass
