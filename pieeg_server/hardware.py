@@ -47,7 +47,7 @@ CS_PIN = 19
 DRDY_PIN = 26
 
 # --- SPI settings ---
-SPI_SPEED_HZ = 4_000_000
+SPI_SPEED_HZ = 1_000_000
 SPI_MODE = 0b01
 SPI_BITS = 8
 BYTES_PER_READ = 27  # 3 status + 8 channels * 3 bytes
@@ -59,7 +59,7 @@ EXPECTED_STATUS = (192, 0, 8)  # 0xC0, 0x00, 0x08
 class PiEEGHardware:
     """Hardware abstraction for the PiEEG-16 shield."""
 
-    def __init__(self, gpio_chip: str = "0"):
+    def __init__(self, gpio_chip: str = "/dev/gpiochip4"):
         self._gpio_chip_name = gpio_chip
         self._chip = None
         self._cs_line = None
@@ -100,15 +100,11 @@ class PiEEGHardware:
         """
         Read one 16-channel sample from the ADC.
 
-        Returns None if DRDY not asserted or status header mismatch.
+        Returns None on status header mismatch.
         Returns a list of 16 floats (microvolts) on success.
+
+        Caller (acquisition loop) is responsible for DRDY polling.
         """
-        drdy = self._drdy_line.get_value()
-
-        # DRDY is active-low: data ready when pin goes from 1→0
-        if drdy != 0:
-            return None
-
         # Read 27 bytes from each ADC chip
         raw1 = self._spi1.readbytes(BYTES_PER_READ)
 

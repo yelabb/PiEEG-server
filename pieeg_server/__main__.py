@@ -39,8 +39,8 @@ def parse_args():
         help="Disable the web dashboard",
     )
     p.add_argument(
-        "--gpio-chip", default="0",
-        help="GPIO chip name for gpiod (default: '0')",
+        "--gpio-chip", default="/dev/gpiochip4",
+        help="GPIO chip path for gpiod (default: '/dev/gpiochip4' for Pi 5)",
     )
     p.add_argument(
         "--filter", action="store_true",
