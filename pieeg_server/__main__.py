@@ -12,6 +12,30 @@ import signal
 import socket
 import sys
 
+
+def _check_dependencies():
+    missing = []
+    for mod in ("websockets", "scipy"):
+        try:
+            __import__(mod)
+        except ImportError:
+            missing.append(mod)
+    if missing:
+        print(
+            f"\n  ERROR: Missing dependencies: {', '.join(missing)}\n\n"
+            f"  You are using: {sys.executable}\n\n"
+            f"  Run the setup script first:\n"
+            f"    cd PiEEG-16-Server && ./setup.sh\n\n"
+            f"  Or activate the virtual environment:\n"
+            f"    source .venv/bin/activate\n"
+            f"    pieeg-server\n",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+
+_check_dependencies()
+
 from .acquisition import AcquisitionLoop
 from .server import PiEEGServer, DEFAULT_HOST, DEFAULT_PORT
 from .dashboard import DashboardServer, DEFAULT_DASHBOARD_PORT

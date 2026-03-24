@@ -27,6 +27,9 @@ sudo reboot   # only needed first time, to enable SPI
 pieeg-server
 ```
 
+> **`pieeg-server: command not found`?** Make sure you ran `./setup.sh` first.
+> As a fallback: `cd PiEEG-16-Server && .venv/bin/pieeg-server`
+
 That's it. LEDs turn on, data streams to `ws://raspberrypi.local:1616`.
 
 Open **http://raspberrypi.local:1617** in any browser on your network for the real-time dashboard.
