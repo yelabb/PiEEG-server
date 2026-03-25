@@ -35,16 +35,6 @@ pieeg-server          # start streaming
 > With pip you get the server but **not** the systemd service or SPI auto-enable.
 > Run `pieeg-server doctor` to check that SPI is configured.
 
-### Option D — Standalone binary (no Python needed)
-
-Download the latest `pieeg-server-*-linux-arm64` binary from [GitHub Releases](https://github.com/yelabb/PiEEG-16-server/releases), then:
-
-```bash
-chmod +x pieeg-server-*-linux-arm64
-sudo mv pieeg-server-*-linux-arm64 /usr/local/bin/pieeg-server
-pieeg-server
-```
-
 ---
 
 ## Run
