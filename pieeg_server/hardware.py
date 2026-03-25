@@ -4,11 +4,14 @@ Low-level hardware interface for PiEEG-16.
 Manages two ADS1299 ADC chips via SPI (8 channels each = 16 total)
 and GPIO lines for chip-select and data-ready signaling.
 
-Requires: spidev, gpiod v1.5.4
+Requires: spidev (pip), Linux GPIO chardev (kernel, no pip package needed)
 Must run on Raspberry Pi with SPI enabled and PiEEG-16 shield connected.
 """
 
+import fcntl
 import logging
+import os
+import struct
 import sys
 
 logger = logging.getLogger("pieeg.hardware")
@@ -18,27 +21,17 @@ try:
 except ImportError:
     spidev = None
 
-try:
-    import gpiod
-except ImportError:
-    gpiod = None
-
 
 def _require_hardware_libs():
-    """Check that spidev and gpiod are available, exit with a clear message if not."""
-    missing = []
+    """Check that spidev is available, exit with a clear message if not."""
     if spidev is None:
-        missing.append("spidev")
-    if gpiod is None:
-        missing.append("gpiod")
-    if missing:
         print(
-            f"\n  ERROR: Missing hardware libraries: {', '.join(missing)}\n\n"
-            f"  These are Raspberry Pi-only packages.\n"
-            f"  Install them inside the project venv:\n"
-            f"    cd PiEEG-16-Server && ./setup.sh\n\n"
-            f"  Or for testing without hardware:\n"
-            f"    pieeg-server --mock\n",
+            "\n  ERROR: Missing hardware library: spidev\n\n"
+            "  This is a Raspberry Pi-only package.\n"
+            "  Install it inside the project venv:\n"
+            "    cd PiEEG-16-Server && ./setup.sh\n\n"
+            "  Or for testing without hardware:\n"
+            "    pieeg-server --mock\n",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -90,15 +83,26 @@ EXPECTED_STATUS = (192, 0, 8)  # 0xC0, 0x00, 0x08
 # --- Spike detection (matches not_spike script) ---
 SPIKE_THRESHOLD = 5000  # max allowed jump in raw 24-bit signed value
 
+# --- Linux GPIO chardev v1 ioctl constants ---
+# See include/uapi/linux/gpio.h in the Linux kernel source.
+# ioctl numbers: _IOWR(type=0xB4, nr, size) = (3<<30)|(size<<16)|(0xB4<<8)|nr
+_GPIO_GET_LINEHANDLE  = 0xC16CB403   # _IOWR(0xB4, 0x03, 364) – gpiohandle_request
+_GPIOHANDLE_GET_VALUES = 0xC040B408  # _IOWR(0xB4, 0x08, 64)  – gpiohandle_data
+_GPIOHANDLE_SET_VALUES = 0xC040B409  # _IOWR(0xB4, 0x09, 64)  – gpiohandle_data
+_GPIOHANDLE_REQUEST_INPUT  = 1 << 0
+_GPIOHANDLE_REQUEST_OUTPUT = 1 << 1
+_HANDLE_REQUEST_SIZE = 364  # sizeof(struct gpiohandle_request)
+_HANDLE_DATA_SIZE    = 64   # sizeof(struct gpiohandle_data)
+
 
 class PiEEGHardware:
     """Hardware abstraction for the PiEEG-16 shield."""
 
     def __init__(self, gpio_chip: str = "/dev/gpiochip4"):
         self._gpio_chip_name = gpio_chip
-        self._chip = None
-        self._cs_line = None
-        self._drdy_line = None
+        self._chip_fd = -1
+        self._cs_fd = -1
+        self._drdy_fd = -1
         self._spi1 = None
         self._spi2 = None
         self._last_valid_value: int | None = None
@@ -120,10 +124,15 @@ class PiEEGHardware:
             self._spi1.close()
         if self._spi2:
             self._spi2.close()
-        if self._cs_line:
-            self._cs_line.release()
-        if self._drdy_line:
-            self._drdy_line.release()
+        if self._cs_fd >= 0:
+            os.close(self._cs_fd)
+            self._cs_fd = -1
+        if self._drdy_fd >= 0:
+            os.close(self._drdy_fd)
+            self._drdy_fd = -1
+        if self._chip_fd >= 0:
+            os.close(self._chip_fd)
+            self._chip_fd = -1
 
     def __enter__(self):
         self.open()
@@ -194,42 +203,60 @@ class PiEEGHardware:
         """
         return self._drdy_get() == 1
 
-    # --- GPIO helpers ---
+    # --- GPIO helpers (direct Linux chardev ioctl) ---
 
     def _cs_set(self, value: int):
         """Set chip-select line: 1 = high (deselect), 0 = low (select)."""
-        self._cs_line.set_value(value)
+        buf = bytearray(_HANDLE_DATA_SIZE)
+        buf[0] = value & 1
+        fcntl.ioctl(self._cs_fd, _GPIOHANDLE_SET_VALUES, buf)
 
     def _drdy_get(self) -> int:
         """Read data-ready line. Returns 1 when high."""
-        return self._drdy_line.get_value()
+        buf = bytearray(_HANDLE_DATA_SIZE)
+        fcntl.ioctl(self._drdy_fd, _GPIOHANDLE_GET_VALUES, buf)
+        return buf[0]
 
     # --- private helpers ---
 
     def _init_gpio(self):
-        """Initialize GPIO using gpiod 1.5.4 API."""
-        logger.info("Using gpiod v1.5.4 API")
-        # Try OPEN_BY_PATH first (needed for libgpiodcxx wrapper)
-        try:
-            self._chip = gpiod.chip(self._gpio_chip_name,
-                                    gpiod.chip.OPEN_BY_PATH)
-        except (TypeError, AttributeError):
-            self._chip = gpiod.chip(self._gpio_chip_name)
+        """Initialize GPIO via Linux chardev v1 ioctl (no gpiod dependency)."""
+        logger.info("Opening GPIO chip %s", self._gpio_chip_name)
+        self._chip_fd = os.open(self._gpio_chip_name, os.O_RDWR | os.O_CLOEXEC)
 
         # Chip-select line (output, default high)
-        self._cs_line = self._chip.get_line(CS_PIN)
-        cs_req = gpiod.line_request()
-        cs_req.consumer = "pieeg_cs"
-        cs_req.request_type = gpiod.line_request.DIRECTION_OUTPUT
-        self._cs_line.request(cs_req)
-        self._cs_line.set_value(1)
+        self._cs_fd = self._request_line(
+            self._chip_fd, CS_PIN, _GPIOHANDLE_REQUEST_OUTPUT,
+            default_value=1, consumer=b"pieeg_cs")
 
         # Data-ready line (input)
-        self._drdy_line = self._chip.get_line(DRDY_PIN)
-        drdy_req = gpiod.line_request()
-        drdy_req.consumer = "pieeg_drdy"
-        drdy_req.request_type = gpiod.line_request.DIRECTION_INPUT
-        self._drdy_line.request(drdy_req)
+        self._drdy_fd = self._request_line(
+            self._chip_fd, DRDY_PIN, _GPIOHANDLE_REQUEST_INPUT,
+            consumer=b"pieeg_drdy")
+
+    @staticmethod
+    def _request_line(chip_fd: int, pin: int, flags: int,
+                      default_value: int = 0, consumer: bytes = b"pieeg") -> int:
+        """Request a single GPIO line via GPIO_GET_LINEHANDLE_IOCTL.
+
+        Returns the file descriptor for the requested line handle.
+        """
+        # struct gpiohandle_request layout (364 bytes):
+        #   0..255   lineoffsets[64]   (u32 × 64)
+        #   256..259 flags             (u32)
+        #   260..323 default_values[64](u8 × 64)
+        #   324..355 consumer_label[32](char × 32)
+        #   356..359 lines             (u32)
+        #   360..363 fd                (i32)
+        buf = bytearray(_HANDLE_REQUEST_SIZE)
+        struct.pack_into("I", buf, 0, pin)          # lineoffsets[0]
+        struct.pack_into("I", buf, 256, flags)       # flags
+        buf[260] = default_value & 1                  # default_values[0]
+        label = consumer[:32]
+        buf[324:324 + len(label)] = label             # consumer_label
+        struct.pack_into("I", buf, 356, 1)           # lines = 1
+        fcntl.ioctl(chip_fd, _GPIO_GET_LINEHANDLE, buf)
+        return struct.unpack_from("i", buf, 360)[0]  # fd
 
     def _init_spi(self):
         self._spi1 = spidev.SpiDev()

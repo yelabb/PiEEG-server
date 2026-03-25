@@ -66,7 +66,7 @@ def parse_args():
     )
     p.add_argument(
         "--gpio-chip", default="/dev/gpiochip4",
-        help="GPIO chip path for gpiod (default: '/dev/gpiochip4' for Pi 5)",
+        help="GPIO chip device path (default: '/dev/gpiochip4' for Pi 5)",
     )
     p.add_argument(
         "--filter", action="store_true",

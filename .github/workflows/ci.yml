@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  install-and-smoke-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install package
+        run: |
+          pip install --upgrade pip
+          pip install -e .
+
+      - name: Verify entry point exists
+        run: pieeg-server --help
+
+      - name: Import all modules
+        run: |
+          python -c "
+          from pieeg_server.server import PiEEGServer
+          from pieeg_server.acquisition import AcquisitionLoop
+          from pieeg_server.dashboard import DashboardServer
+          from pieeg_server.filters import BandpassFilter
+          from pieeg_server.mock import MockHardware
+          from pieeg_server.hardware import PiEEGHardware
+          print('All modules imported OK')
+          "
+
+      - name: Smoke test (mock mode, 3 seconds)
+        run: |
+          timeout 5 pieeg-server --mock --no-dashboard -v || EXIT_CODE=$?
+          # timeout returns 124 on timeout (expected), anything else is a real failure
+          if [ "${EXIT_CODE:-124}" -eq 124 ]; then
+            echo "Mock server ran successfully for 3+ seconds"
+          else
+            echo "Server exited with code $EXIT_CODE"
+            exit $EXIT_CODE
+          fi
+
+      - name: Verify no gpiod dependency
+        run: |
+          python -c "
+          import importlib.util
+          spec = importlib.util.find_spec('gpiod')
+          assert spec is None, 'gpiod should NOT be installed'
+          print('Confirmed: gpiod is not installed')
+          "
