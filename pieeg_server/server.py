@@ -87,6 +87,9 @@ class PiEEGServer:
         except (json.JSONDecodeError, TypeError):
             return
 
+        if not isinstance(msg, dict):
+            return
+
         cmd = msg.get("cmd")
         if cmd == "set_filter":
             if msg.get("enabled", True):
