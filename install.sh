@@ -49,6 +49,19 @@ if [[ "$(uname)" != "Linux" ]]; then
     exit 1
 fi
 
+# --- Warn if running inside WSL (not a real Pi) ---
+if grep -qi microsoft /proc/version 2>/dev/null; then
+    echo "${YELLOW}WARNING:${RESET} You appear to be running inside WSL, not on a Raspberry Pi."
+    echo "         The server requires SPI/GPIO hardware on a real Pi."
+    echo ""
+    echo "  For development/testing on Windows, clone manually:"
+    echo "    git clone $REPO_URL"
+    echo "    cd PiEEG-16-server"
+    echo "    pip install -e ."
+    echo "    pieeg-server --mock"
+    exit 1
+fi
+
 # --- Install git if needed ---
 if ! command -v git &>/dev/null; then
     echo "Installing git..."
