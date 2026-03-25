@@ -4,6 +4,8 @@
 __pycache__
 *.pyc
 *.pyo
+dist/
+build/
 .DS_Store
 .idea
 .vscode

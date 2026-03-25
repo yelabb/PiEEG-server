@@ -6,7 +6,13 @@ A lightweight server for the [PiEEG-16](https://github.com/pieeg-club/PiEEG-16) 
 
 > Pick **one** method. They all get you to the same place: `pieeg-server` ready to run.
 
-### Option A — One-line install (recommended)
+### Option A — pip install (recommended)
+
+```bash
+pip install pieeg-server
+```
+
+### Option B — One-line install
 
 SSH into your Pi and paste:
 
@@ -15,7 +21,7 @@ curl -sSL https://raw.githubusercontent.com/yelabb/PiEEG-16-server/main/install.
 sudo reboot   # only needed first time, to enable SPI
 ```
 
-### Option B — Clone & setup
+### Option C — Clone & setup
 
 ```bash
 git clone https://github.com/yelabb/PiEEG-16-server.git
