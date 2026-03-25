@@ -43,6 +43,10 @@ Open **http://raspberrypi.local:1617** in any browser on your network for the re
 
 <img height="400" alt="image" src="https://github.com/user-attachments/assets/3f33bfd4-c721-4b94-a672-2a0b744d127b" />
 
+### Terminal
+<img width="422" height="475" alt="image" src="https://github.com/user-attachments/assets/7d58af68-85c4-41d3-b1ab-89b23e99faff" />
+
+
 **Ports:**
 - **`:1616`** — WebSocket data stream (PiEEG-**16** → **1616**)
 - **`:1617`** — Web dashboard (next door)
