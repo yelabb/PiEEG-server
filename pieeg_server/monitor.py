@@ -4,8 +4,6 @@ Terminal UI monitor for live EEG data.
 Displays a compact real-time view of all 16 channels directly in the
 terminal — useful over SSH or when no browser is available.
 
-Requires the ``rich`` library (optional dependency):
-    pip install pieeg-server[tui]
 """
 
 import asyncio
@@ -48,17 +46,10 @@ class TerminalMonitor:
 
     async def run(self):
         """Start the monitor — blocks until cancelled."""
-        try:
-            from rich.live import Live
-            from rich.table import Table
-            from rich.text import Text
-            from rich.console import Console
-        except ImportError:
-            logger.error(
-                "Terminal monitor requires 'rich'.  "
-                "Install it with:  pip install pieeg-server[tui]"
-            )
-            return
+        from rich.live import Live
+        from rich.table import Table
+        from rich.text import Text
+        from rich.console import Console
 
         console = Console()
 

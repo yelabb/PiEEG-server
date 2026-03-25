@@ -30,8 +30,9 @@ sudo reboot   # only needed first time, to enable SPI
 ## Run
 
 ```bash
-pieeg-server              # start streaming (every time after install)
+pieeg-server              # start streaming
 pieeg-server --filter     # with 1–40 Hz bandpass filter
+pieeg-server --monitor    # with live terminal display
 pieeg-server --mock       # synthetic data, no hardware needed
 pieeg-server doctor       # diagnose SPI, GPIO, deps, permissions
 ```
@@ -45,6 +46,26 @@ Open **http://raspberrypi.local:1617** in any browser on your network for the re
 **Ports:**
 - **`:1616`** — WebSocket data stream (PiEEG-**16** → **1616**)
 - **`:1617`** — Web dashboard (next door)
+
+## Record data
+
+```bash
+pieeg-server record session.csv                   # record until Ctrl-C
+pieeg-server record session.csv --duration 300     # record 5 minutes
+pieeg-server --record session.csv                  # record while streaming
+pieeg-server --record session.csv --record-duration 60  # record 60s while streaming
+```
+
+CSV format: `timestamp, ch1, ch2, ..., ch16` (compatible with the official PiEEG-16 dataset format).
+
+## Terminal monitor
+
+```bash
+pieeg-server monitor          # standalone live view (no server)
+pieeg-server --monitor        # live view alongside the server
+```
+
+Displays all 16 channels with real-time µV values and sparkline waveforms directly in the terminal. Works over SSH — no browser or display needed.
 
 > **`pieeg-server: command not found`?** Run `pieeg-server doctor` (or `./setup.sh` again).
 > As a fallback: `cd PiEEG-16-server && .venv/bin/pieeg-server`
@@ -121,16 +142,21 @@ pieeg-server [OPTIONS] [COMMAND]
 
 Commands:
   doctor                 Diagnose hardware, software, and configuration
+  record FILE            Record EEG data to CSV (standalone, no server)
+  monitor                Live terminal display (standalone, no server)
 
-Options:
+Server options:
   --host HOST            Bind address (default: 0.0.0.0)
   --port PORT            WebSocket port (default: 1616)
   --dashboard-port PORT  Dashboard HTTP port (default: 1617)
   --no-dashboard         Disable the web dashboard
-  --gpio-chip NAME       GPIO chip device path (default: "/dev/gpiochip4")
+  --gpio-chip PATH       GPIO chip device path (default: /dev/gpiochip4)
   --filter               Enable 1–40 Hz bandpass filter server-side
   --lowcut HZ            Filter low cutoff (default: 1.0)
   --highcut HZ           Filter high cutoff (default: 40.0)
+  --record FILE          Record to CSV while streaming
+  --record-duration SEC  Stop recording after N seconds
+  --monitor              Show live terminal monitor alongside server
   --mock                 Synthetic EEG data (no hardware needed)
   -v, --verbose          Debug logging
 ```
@@ -153,8 +179,10 @@ Clients can send JSON commands over the WebSocket:
 │  hardware.py     → SPI/GPIO init, ADC register config    │
 │       ↓                                                  │
 │  acquisition.py  → 250 Hz read loop (background thread)  │
-│       ↓                                                  │
-│  server.py       → WebSocket broadcast to all clients    │
+│       ↓ pub/sub (multiple consumers)                     │
+│       ├── server.py    → WebSocket broadcast             │
+│       ├── recorder.py  → CSV file writer                 │
+│       └── monitor.py   → Terminal sparkline display      │
 │       ↓                                                  │
 │  dashboard.py    → HTTP server for real-time web UI       │
 │       ↓                                                  │

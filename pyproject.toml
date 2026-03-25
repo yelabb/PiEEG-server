@@ -29,14 +29,12 @@ classifiers = [
 dependencies = [
     "websockets>=12.0",
     "scipy>=1.10",
+    "rich>=13.0",
 ]
 
 [project.optional-dependencies]
 rpi = [
     "spidev>=3.6",
-]
-tui = [
-    "rich>=13.0",
 ]
 dev = [
     "pytest>=7.0",
