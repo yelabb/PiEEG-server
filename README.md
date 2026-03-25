@@ -228,6 +228,10 @@ We only use two GPIO pins (chip-select output + data-ready input), so the ~20 li
 
 The chardev v1 ioctl ABI has been stable since Linux 4.8 (2016) and is guaranteed not to break by the kernel's userspace compatibility policy.
 
+## Acknowledgments
+
+This project was built with guidance from [Ildar Rakhmatulin, PhD](https://scholar.google.com/citations?user=L8q-KSoAAAAJ&hl=en), creator of the PiEEG platform.
+
 ## Safety
 
 > **PiEEG-16 must operate from battery power (5V) only.**
