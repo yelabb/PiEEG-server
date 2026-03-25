@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # ============================================================
-# PiEEG-16-Server: One-time setup script for Raspberry Pi
+# PiEEG-16-server: One-time setup script for Raspberry Pi
 # Run once on a fresh Raspberry Pi OS installation.
 # ============================================================
 set -euo pipefail
 
-echo "=== PiEEG-16-Server Setup ==="
+echo "=== PiEEG-16-server Setup ==="
 echo ""
 
 # --- 1. System packages ---

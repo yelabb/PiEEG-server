@@ -33,7 +33,7 @@ def _require_hardware_libs():
             "\n  ERROR: Missing hardware library: spidev\n\n"
             "  This is a Raspberry Pi-only package.\n"
             "  Install it inside the project venv:\n"
-            "    cd PiEEG-16-Server && ./setup.sh\n\n"
+            "    cd PiEEG-16-server && ./setup.sh\n\n"
             "  Or for testing without hardware:\n"
             "    pieeg-server --mock\n",
             file=sys.stderr,

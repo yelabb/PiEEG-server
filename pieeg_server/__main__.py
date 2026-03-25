@@ -25,7 +25,7 @@ def _check_dependencies():
             f"\n  ERROR: Missing dependencies: {', '.join(missing)}\n\n"
             f"  You are using: {sys.executable}\n\n"
             f"  Run the setup script first:\n"
-            f"    cd PiEEG-16-Server && ./setup.sh\n\n"
+            f"    cd PiEEG-16-server && ./setup.sh\n\n"
             f"  Or activate the virtual environment:\n"
             f"    source .venv/bin/activate\n"
             f"    pieeg-server\n\n"
