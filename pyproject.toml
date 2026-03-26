@@ -54,4 +54,4 @@ Issues = "https://github.com/yelabb/PiEEG-16-server/issues"
 include = ["pieeg_server*"]
 
 [tool.setuptools.package-data]
-pieeg_server = ["static/*"]
+pieeg_server = ["static/*", "static/dashboard/**/*"]

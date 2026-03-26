@@ -190,6 +190,13 @@ pip install --upgrade pip -q 2>&1 | tail -1 || die "Failed to upgrade pip."
 echo "  Installing dependencies (this may take a minute on first run)..."
 pip install -e ".[rpi]" -q 2>&1 | tail -3 || die "Failed to install pieeg-server."
 
+# Check which dashboard will be served
+if [ -d "$INSTALL_DIR/pieeg_server/static/dashboard" ]; then
+    ok "Dashboard: React (pre-built)"
+else
+    ok "Dashboard: legacy HTML (React build not found — this is normal for source installs)"
+fi
+
 ok "Installed to: $INSTALL_DIR/.venv"
 
 # ============================================================

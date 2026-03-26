@@ -11,3 +11,7 @@ build/
 .vscode
 logs
 *.log
+
+# Dashboard (React/Vite)
+dashboard/node_modules/
+pieeg_server/static/dashboard/

@@ -47,6 +47,12 @@ That's it. LEDs turn on, data streams to `ws://raspberrypi.local:1616`.
 
 Open **http://raspberrypi.local:1617** in any browser on your network for the real-time dashboard.
 
+The default dashboard is a React/Vite app. To use the legacy single-file HTML dashboard:
+
+```bash
+pieeg-server --legacy-dashboard
+```
+
 <img height="400" alt="image" src="https://github.com/user-attachments/assets/3f33bfd4-c721-4b94-a672-2a0b744d127b" />
 
 ### Terminal
@@ -160,6 +166,7 @@ Server options:
   --port PORT            WebSocket port (default: 1616)
   --dashboard-port PORT  Dashboard HTTP port (default: 1617)
   --no-dashboard         Disable the web dashboard
+  --legacy-dashboard     Use the legacy single-file HTML dashboard
   --gpio-chip PATH       GPIO chip device path (default: /dev/gpiochip4)
   --filter               Enable 1–40 Hz bandpass filter server-side
   --lowcut HZ            Filter low cutoff (default: 1.0)
@@ -230,18 +237,53 @@ The chardev v1 ioctl ABI has been stable since Linux 4.8 (2016) and is guarantee
 
 ## Publishing to PyPI
 
-### Build & upload
+### How the dashboard ships
+
+There are two dashboards: a **React/Vite** app (default) and a **legacy single-file HTML** fallback. The Pi doesn't need Node.js — the React dashboard is pre-built on your dev machine and bundled into the pip package.
+
+| Install method | Dashboard | Node.js on Pi? |
+|---|---|---|
+| `pip install pieeg-server` (PyPI) | React (pre-built in wheel) | No |
+| `git clone` + `./setup.sh` | Legacy HTML (auto-fallback) | No |
+| `git clone` + manual `npm run build` | React | Yes (dev only) |
+
+The server auto-detects which dashboard is available. Use `--legacy-dashboard` to force the legacy HTML version.
+
+### Dashboard development
+
+The React source lives in `dashboard/`. During development:
+
+```bash
+# Terminal 1: Python server with mock data
+pieeg-server --mock
+
+# Terminal 2: Vite dev server with hot reload
+cd dashboard
+npm install
+npm run dev          # http://localhost:3000
+```
+
+### Release build
+
+A release script builds the React dashboard, then packages everything into a wheel:
+
+```bash
+# Builds React → packages Python → outputs dist/*.whl
+./scripts/build_release.sh
+
+# Build AND upload to PyPI in one step
+./scripts/build_release.sh --upload
+```
+
+Requires Node.js >= 18 and Python >= 3.11 on your **dev machine** (not on the Pi).
+
+### Manual build & upload
 
 ```bash
 pip install build twine
 
-# Build sdist + wheel
+cd dashboard && npm ci && npm run build && cd ..
 python -m build
-
-# Upload to TestPyPI first (optional, recommended)
-twine upload --repository testpypi dist/*
-
-# Upload to PyPI
 twine upload dist/*
 ```
 
@@ -253,10 +295,10 @@ You need a PyPI API token — create one at https://pypi.org/manage/account/toke
 2. Bump `version` in both `pyproject.toml` and `pieeg_server/__init__.py`
 3. Commit: `git commit -am "release v0.2.0"`
 4. Tag: `git tag v0.2.0`
-5. Build & upload: `python -m build && twine upload dist/*`
+5. Release: `./scripts/build_release.sh --upload`
 6. Push: `git push origin main --tags`
 
-> **Pre-releases:** To publish from a non-main branch, use a pre-release version like `0.2.0a1` or `0.2.0.dev1`. No special branch is needed — PyPI handles versioning natively.
+> **Pre-releases:** Use a version like `0.2.0a1` or `0.2.0.dev1` to publish from a non-main branch. PyPI handles versioning natively.
 
 ## Acknowledgments
 
