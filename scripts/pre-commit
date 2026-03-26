@@ -1,0 +1,44 @@
+#!/bin/sh
+# ============================================================
+# Pre-commit hook: auto-build Vite dashboard when source changes
+#
+# If any staged file matches dashboard/src/*, this hook runs
+# `npm run build` and stages the new build output so the
+# compiled dashboard in pieeg_server/static/dashboard/ is
+# always in sync with the React source.
+#
+# Install:  cp scripts/pre-commit .git/hooks/pre-commit
+# ============================================================
+
+# Check if any staged files are inside dashboard/src/
+DASHBOARD_CHANGED=$(git diff --cached --name-only -- 'dashboard/src/' 'dashboard/index.html' 'dashboard/vite.config.js' 'dashboard/package.json')
+
+if [ -z "$DASHBOARD_CHANGED" ]; then
+    exit 0  # no dashboard changes staged — nothing to do
+fi
+
+echo "[pre-commit] Dashboard source changed — rebuilding Vite..."
+
+# Verify node/npm are available
+if ! command -v npm >/dev/null 2>&1; then
+    echo "[pre-commit] ERROR: npm not found. Install Node.js to auto-build the dashboard."
+    echo "             Or build manually: cd dashboard && npm run build"
+    exit 1
+fi
+
+# Run the build
+cd dashboard || exit 1
+npm run build --silent 2>&1
+BUILD_EXIT=$?
+cd ..
+
+if [ $BUILD_EXIT -ne 0 ]; then
+    echo "[pre-commit] ERROR: Vite build failed (exit $BUILD_EXIT). Fix errors before committing."
+    exit 1
+fi
+
+# Stage the fresh build output
+git add pieeg_server/static/dashboard/
+
+echo "[pre-commit] Dashboard rebuilt and staged."
+exit 0
