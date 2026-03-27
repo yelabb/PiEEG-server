@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useEEG } from "./hooks/useEEG";
 import AuthGate from "./components/AuthGate";
 import ChannelCanvas from "./components/ChannelCanvas";
@@ -28,6 +28,7 @@ export default function App() {
   const [highcut, setHighcut] = useState(40);
   const [timeWindow, setTimeWindow] = useState(4);
   const [yScale, setYScale] = useState(100);
+  const [expandedCh, setExpandedCh] = useState(null);
 
   const eeg = useEEG(timeWindow);
 
@@ -67,6 +68,36 @@ export default function App() {
       highcut: parseFloat(high) || 40,
     });
   }
+
+  const toggleExpandCh = useCallback((i) => {
+    setExpandedCh((prev) => (prev === i ? null : i));
+  }, []);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    function onKey(e) {
+      // Skip when user is typing in an input/select
+      if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+      switch (e.code) {
+        case "Space":
+          e.preventDefault();
+          togglePause();
+          break;
+        case "KeyR":
+          toggleRecord();
+          break;
+        case "KeyF":
+          setShowFFT((v) => !v);
+          break;
+        case "Escape":
+          if (expandedCh !== null) setExpandedCh(null);
+          else if (eeg.recordResult) eeg.dismissRecordResult();
+          break;
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [expandedCh, eeg.recordResult]);
 
   return (
     <AuthGate>
@@ -181,9 +212,28 @@ export default function App() {
 
       {/* Main area */}
       <div className={`main-area${showFFT ? " with-fft" : ""}`}>
+        {expandedCh !== null && (
+          <div className="expanded-overlay" onClick={() => setExpandedCh(null)}>
+            <div className="expanded-channel" onClick={(e) => e.stopPropagation()}>
+              <ChannelCanvas
+                chIdx={expandedCh}
+                eeg={eeg}
+                yRange={yScale}
+                expanded
+                onToggleExpand={() => setExpandedCh(null)}
+              />
+            </div>
+          </div>
+        )}
         <div className="grid">
           {Array.from({ length: NUM_CHANNELS }, (_, i) => (
-            <ChannelCanvas key={i} chIdx={i} eeg={eeg} yRange={yScale} />
+            <ChannelCanvas
+              key={i}
+              chIdx={i}
+              eeg={eeg}
+              yRange={yScale}
+              onToggleExpand={() => toggleExpandCh(i)}
+            />
           ))}
         </div>
         {showFFT && <SpectralPanel eeg={eeg} />}
@@ -234,6 +284,12 @@ export default function App() {
       {/* Footer */}
       <footer className="footer">
         <span>PiEEG-16-server · React Dashboard</span>
+        <span className="kbd-hints">
+          <kbd>Space</kbd> Pause&ensp;
+          <kbd>R</kbd> Record&ensp;
+          <kbd>F</kbd> FFT&ensp;
+          <kbd>Esc</kbd> Close
+        </span>
         <span>Battery powered only · Not a medical device</span>
       </footer>
     </AuthGate>

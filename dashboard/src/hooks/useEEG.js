@@ -69,9 +69,27 @@ export function useEEG(timeWindowSec = 4) {
   useEffect(() => {
     const wsHost = location.hostname || "localhost";
     const wsPort = import.meta.env.DEV ? 1616 : parseInt(location.port || "1617") - 1;
-    const url = `ws://${wsHost}:${wsPort}`;
+    const wsScheme = location.protocol === "https:" ? "wss" : "ws";
+    const httpScheme = location.protocol === "https:" ? "https" : "http";
+    const wsBase = `${wsScheme}://${wsHost}:${wsPort}`;
+    const tokenUrl = import.meta.env.DEV
+      ? `${httpScheme}://${wsHost}:1617/auth/ws-token`
+      : `/auth/ws-token`;
 
-    function connect() {
+    async function fetchWsToken() {
+      try {
+        const res = await fetch(tokenUrl, { credentials: "include" });
+        if (!res.ok) return null;
+        const data = await res.json();
+        return data.token || null;
+      } catch {
+        return null;
+      }
+    }
+
+    async function connect() {
+      const token = await fetchWsToken();
+      const url = token ? `${wsBase}?token=${encodeURIComponent(token)}` : wsBase;
       const ws = new WebSocket(url);
       wsRef.current = ws;
 

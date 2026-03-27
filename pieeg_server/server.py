@@ -19,10 +19,12 @@ import logging
 import time
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlparse, parse_qs
 
 import websockets
 
 from .acquisition import AcquisitionLoop
+from .auth import AuthManager
 from .filters import MultichannelFilter
 from .recorder import Recorder
 
@@ -36,10 +38,12 @@ class PiEEGServer:
     """WebSocket server broadcasting EEG frames to all connected clients."""
 
     def __init__(self, acquisition: AcquisitionLoop,
-                 host: str = DEFAULT_HOST, port: int = DEFAULT_PORT):
+                 host: str = DEFAULT_HOST, port: int = DEFAULT_PORT,
+                 auth: AuthManager | None = None):
         self._acq = acquisition
         self._host = host
         self._port = port
+        self._auth = auth
         self._clients: set[websockets.WebSocketServerProtocol] = set()
         self._filter: MultichannelFilter | None = None
         self._queue = acquisition.subscribe()
@@ -67,8 +71,18 @@ class PiEEGServer:
 
     async def _handle_client(self, ws: websockets.WebSocketServerProtocol):
         """Handle a new WebSocket connection."""
-        self._clients.add(ws)
         peer = ws.remote_address
+
+        # Validate token from query string: ws://host:port?token=xxx
+        if self._auth:
+            query = parse_qs(urlparse(ws.request.path).query)
+            token = query.get("token", [None])[0]
+            if not self._auth.validate_ws_token(token):
+                logger.warning("WebSocket auth rejected from %s", peer)
+                await ws.close(4401, "Unauthorized")
+                return
+
+        self._clients.add(ws)
         logger.info("Client connected: %s", peer)
 
         # Send welcome message
@@ -160,7 +174,7 @@ class PiEEGServer:
         status = self._get_record_status(stop_info=stop_info)
         payload = json.dumps(status)
         stale = set()
-        for ws in self._clients:
+        for ws in list(self._clients):
             try:
                 await ws.send(payload)
             except websockets.ConnectionClosed:
@@ -192,9 +206,9 @@ class PiEEGServer:
 
             payload = json.dumps(frame)
 
-            # Broadcast to all connected clients
+            # Broadcast to all connected clients (snapshot to avoid mutation during iteration)
             stale = set()
-            for ws in self._clients:
+            for ws in list(self._clients):
                 try:
                     await ws.send(payload)
                 except websockets.ConnectionClosed:

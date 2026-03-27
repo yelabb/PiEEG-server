@@ -40,6 +40,7 @@ pieeg-server              # start streaming
 pieeg-server --filter     # with 1–40 Hz bandpass filter
 pieeg-server --monitor    # with live terminal display
 pieeg-server --mock       # synthetic data, no hardware needed
+pieeg-server --no-auth    # disable authentication (no access code)
 pieeg-server doctor       # diagnose SPI, GPIO, deps, permissions
 ```
 
@@ -68,6 +69,14 @@ When the server starts, a **6-digit access code** is printed in your terminal:
 The first time you open the dashboard in your browser, you'll be asked for this code. After that, your session is remembered for 24 hours.
 
 The code changes every time the server restarts.
+
+To skip authentication entirely (e.g. for local development or trusted networks), start with:
+
+```bash
+pieeg-server --no-auth
+```
+
+> **Warning:** `--no-auth` exposes the dashboard and WebSocket to anyone on the network without a code.
 
 ### Dashboard
 
@@ -143,13 +152,22 @@ If the system-wide `pieeg-server` command picks up the wrong Python install, use
 
 ## Connect from any device
 
+> **Note:** The WebSocket now requires a token. Get one from the authenticated HTTP API first.
+
 ### Python
 
 ```python
-import asyncio, json, websockets
+import asyncio, json, requests, websockets
 
+# Step 1: authenticate and get a WS token
+session = requests.Session()
+ACCESS_CODE = "<ACCESS_CODE_PRINTED_BY_PIEEG_SERVER_ON_STARTUP>"
+session.post("http://raspberrypi.local:1617/auth", json={"code": ACCESS_CODE})
+token = session.get("http://raspberrypi.local:1617/auth/ws-token").json()["token"]
+
+# Step 2: connect with the token
 async def main():
-    async with websockets.connect("ws://raspberrypi.local:1616") as ws:
+    async with websockets.connect(f"ws://raspberrypi.local:1616?token={token}") as ws:
         async for message in ws:
             frame = json.loads(message)
             print(f"Sample #{frame['n']}: {frame['channels']}")
@@ -160,7 +178,11 @@ asyncio.run(main())
 ### JavaScript (browser)
 
 ```javascript
-const ws = new WebSocket("ws://raspberrypi.local:1616");
+// Fetch a short-lived WS token (requires an active dashboard session)
+const res = await fetch("/auth/ws-token", { credentials: "include" });
+const { token } = await res.json();
+
+const ws = new WebSocket(`ws://raspberrypi.local:1616?token=${encodeURIComponent(token)}`);
 ws.onmessage = (event) => {
     const frame = JSON.parse(event.data);
     console.log(`Sample #${frame.n}:`, frame.channels);
@@ -200,6 +222,7 @@ Server options:
   --port PORT            WebSocket port (default: 1616)
   --dashboard-port PORT  Dashboard HTTP port (default: 1617)
   --no-dashboard         Disable the web dashboard
+  --no-auth              Disable authentication (no access code required)
   --gpio-chip PATH       GPIO chip device path (default: /dev/gpiochip4)
   --filter               Enable 1–40 Hz bandpass filter server-side
   --lowcut HZ            Filter low cutoff (default: 1.0)
@@ -353,6 +376,53 @@ Requires Node.js >= 18 and Python >= 3.11 on your **dev machine** (not on the Pi
 ## Acknowledgments
 
 This project was built with guidance from [Ildar Rakhmatulin, PhD](https://scholar.google.com/citations?user=L8q-KSoAAAAJ&hl=en), creator of the PiEEG platform.
+
+## Security
+
+PiEEG-16-server is designed for **trusted local networks** (home lab, research bench). It is **not hardened for the public internet**. Here's an honest breakdown of what's protected and what isn't.
+
+### What's secured
+
+| Layer | Protection |
+|-------|------------|
+| **Dashboard access** | 6-digit code required on first visit. Regenerated every server restart. |
+| **Session tokens** | Cryptographically random (`secrets.token_urlsafe`, 256-bit), stored server-side with 24h TTL. |
+| **Constant-time comparison** | Access code checked via `hmac.compare_digest` — immune to timing attacks. |
+| **HttpOnly cookie** | Session token can't be read by JavaScript (mitigates XSS token theft). |
+| **SameSite=Lax cookie** | Prevents cross-site request forgery on state-changing POST requests. |
+| **WebSocket authentication** | Connections require a short-lived, single-use token obtained via the authenticated HTTP API. Unauthenticated WebSocket connections are rejected with code 4401. |
+| **Rate limiting** | `/auth` endpoint limited to 5 attempts per IP per 60 seconds (prevents brute-force on the 6-digit code). |
+| **Path traversal protection** | `/recordings/` downloads resolve paths and verify they stay inside the recordings directory. |
+| **CORS** | `Access-Control-Allow-Origin` reflects the requesting origin (not wildcard) and only when credentials are involved. |
+
+### What's NOT secured
+
+| Risk | Detail | Mitigation |
+|------|--------|------------|
+| **No TLS (HTTP/WS only)** | All traffic — access code, session cookie, EEG data — travels in plaintext. Anyone on the same WiFi can sniff it. | Use on a dedicated/private network. If you need encryption, put an nginx reverse proxy with a self-signed cert in front. |
+| **No user accounts** | Single shared code, no roles or per-user sessions. Anyone with the code has full access. | Acceptable for a single-user device on a home network. |
+| **No Content Security Policy** | The dashboard doesn't set CSP headers. If an attacker can inject HTML, inline scripts will execute. | The dashboard is a static React build with no user-generated content. |
+| **In-memory sessions** | All sessions are lost on server restart. | By design — the code changes too, so this is consistent. |
+| **6-digit code entropy** | 900,000 possibilities. Even with rate limiting, a determined local attacker could exhaust it in ~3 hours. | The server is meant for trusted networks. If this concerns you, restrict access at the network level (firewall, VLAN). |
+
+### Threat model
+
+The server assumes:
+- It runs on a **private local network** (home WiFi, lab bench, hotspot)
+- The operator has **physical access** to the Pi (can read the access code from the console)
+- Clients are **trusted devices** (your laptop, phone, tablet)
+
+It does **not** defend against:
+- Active network attackers performing MITM (no TLS)
+- Public internet exposure (do **not** port-forward 1616/1617)
+- Multi-tenant environments with untrusted users on the same network
+
+### Recommendations for sensitive deployments
+
+1. **Private network only** — use a dedicated WiFi hotspot or wired connection
+2. **TLS termination** — put nginx/caddy with a self-signed cert in front of both ports
+3. **Firewall** — restrict ports 1616/1617 to known client IPs
+4. **VPN** — if accessing remotely, use WireGuard or Tailscale instead of port-forwarding
 
 ## Safety
 

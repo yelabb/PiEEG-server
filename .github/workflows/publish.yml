@@ -1,0 +1,31 @@
+name: Publish to PyPI
+
+on:
+  push:
+    tags:
+      - "v*"          # triggers on tags like v0.2.0, v1.0.0-rc1, etc.
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # required for PyPI trusted publishing
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tools
+        run: pip install --upgrade pip build
+
+      - name: Build package
+        run: python -m build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        # Uses trusted publishing (OIDC) — no API token needed
+        # Configure at: https://pypi.org/manage/project/pieeg-server/settings/publishing/

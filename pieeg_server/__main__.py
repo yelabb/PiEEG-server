@@ -170,6 +170,10 @@ def parse_args():
         help="Enable debug logging",
     )
     p.add_argument(
+        "--no-auth", action="store_true",
+        help="Disable authentication (no access code required)",
+    )
+    p.add_argument(
         "--mock", action="store_true",
         help="Use synthetic EEG data (no hardware needed, for testing)",
     )
@@ -298,7 +302,9 @@ def main():
     hw = _make_hardware(args, logger)
 
     # --- Auth ---
-    auth = AuthManager()
+    auth = None if args.no_auth else AuthManager()
+    if args.no_auth:
+        logger.warning("Authentication DISABLED (--no-auth)")
 
     # --- Acquisition ---
     loop = asyncio.new_event_loop()
@@ -309,7 +315,7 @@ def main():
     logger.info("Acquisition started (250 Hz, 16 channels%s)", " - MOCK" if args.mock else "")
 
     # --- Server ---
-    server = PiEEGServer(acq, host=args.host, port=args.port)
+    server = PiEEGServer(acq, host=args.host, port=args.port, auth=auth)
     if args.filter:
         server.enable_filter(args.lowcut, args.highcut)
         logger.info("Server-side filter: %.1f-%.1f Hz", args.lowcut, args.highcut)
@@ -378,7 +384,7 @@ def main():
         logger.info("  Monitor:   terminal (live)")
 
     # --- Show access code ---
-    if not args.no_dashboard:
+    if not args.no_dashboard and auth:
         auth.print_code()
 
     async def _run_all():

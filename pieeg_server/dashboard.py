@@ -107,6 +107,8 @@ def _make_handler(static_dir: Path, auth: AuthManager):
             return morsel.value if morsel else None
 
         def _is_authenticated(self):
+            if auth is None:
+                return True
             return auth.validate_session(self._get_session_token())
 
         # -- auth routes --
@@ -125,14 +127,18 @@ def _make_handler(static_dir: Path, auth: AuthManager):
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
-            self.send_header("Access-Control-Allow-Origin", self.headers.get("Origin", "*"))
+            origin = self.headers.get("Origin", "")
+            if origin:
+                self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Access-Control-Allow-Credentials", "true")
             self.end_headers()
             self.wfile.write(body)
 
         def do_OPTIONS(self):
             self.send_response(204)
-            self.send_header("Access-Control-Allow-Origin", self.headers.get("Origin", "*"))
+            origin = self.headers.get("Origin", "")
+            if origin:
+                self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
             self.send_header("Access-Control-Allow-Headers", "Content-Type")
             self.send_header("Access-Control-Allow-Credentials", "true")
@@ -142,6 +148,15 @@ def _make_handler(static_dir: Path, auth: AuthManager):
             # Auth status check (JSON API for React app)
             if self.path == "/auth/status":
                 return self._send_json({"authenticated": self._is_authenticated()})
+
+            # Issue a short-lived, single-use WebSocket token
+            if self.path == "/auth/ws-token":
+                if auth is None:
+                    return self._send_json({"token": "no-auth"})
+                if not self._is_authenticated():
+                    return self._send_json({"error": "Not authenticated"}, 403)
+                ws_token = auth.create_ws_token()
+                return self._send_json({"token": ws_token})
 
             # Static assets (JS/CSS bundles) are served without auth
             # so the login page can load properly if nested under /assets
@@ -186,7 +201,9 @@ def _make_handler(static_dir: Path, auth: AuthManager):
             self.send_header("Content-Type", "text/csv")
             self.send_header("Content-Length", str(len(data)))
             self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
-            self.send_header("Access-Control-Allow-Origin", self.headers.get("Origin", "*"))
+            origin = self.headers.get("Origin", "")
+            if origin:
+                self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Access-Control-Allow-Credentials", "true")
             self.end_headers()
             self.wfile.write(data)
@@ -195,6 +212,25 @@ def _make_handler(static_dir: Path, auth: AuthManager):
             if self.path != "/auth":
                 self.send_error(404)
                 return
+
+            # When auth is disabled, auto-authenticate
+            if auth is None:
+                content_type = self.headers.get("Content-Type", "")
+                if "application/json" in content_type:
+                    return self._send_json({"ok": True})
+                self.send_response(303)
+                self.send_header("Location", "/")
+                self.end_headers()
+                return
+
+            # Rate limiting
+            client_ip = self.client_address[0]
+            if not auth.check_rate_limit(client_ip):
+                logger.warning("Rate limit exceeded for %s", client_ip)
+                content_type = self.headers.get("Content-Type", "")
+                if "application/json" in content_type:
+                    return self._send_json({"ok": False, "error": "Too many attempts. Try again later."}, 429)
+                return self._send_login(error="Too many attempts. Try again in a minute.")
 
             length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(length).decode("utf-8", errors="replace")
@@ -224,7 +260,9 @@ def _make_handler(static_dir: Path, auth: AuthManager):
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Set-Cookie", cookie)
-                self.send_header("Access-Control-Allow-Origin", self.headers.get("Origin", "*"))
+                origin = self.headers.get("Origin", "")
+                if origin:
+                    self.send_header("Access-Control-Allow-Origin", origin)
                 self.send_header("Access-Control-Allow-Credentials", "true")
                 resp = json.dumps({"ok": True}).encode()
                 self.send_header("Content-Length", str(len(resp)))
