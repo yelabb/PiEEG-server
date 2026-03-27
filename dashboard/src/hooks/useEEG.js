@@ -69,9 +69,11 @@ export function useEEG(timeWindowSec = 4) {
   useEffect(() => {
     const wsHost = location.hostname || "localhost";
     const wsPort = import.meta.env.DEV ? 1616 : parseInt(location.port || "1617") - 1;
-    const wsBase = `ws://${wsHost}:${wsPort}`;
+    const wsScheme = location.protocol === "https:" ? "wss" : "ws";
+    const httpScheme = location.protocol === "https:" ? "https" : "http";
+    const wsBase = `${wsScheme}://${wsHost}:${wsPort}`;
     const tokenUrl = import.meta.env.DEV
-      ? `http://${wsHost}:1617/auth/ws-token`
+      ? `${httpScheme}://${wsHost}:1617/auth/ws-token`
       : `/auth/ws-token`;
 
     async function fetchWsToken() {
