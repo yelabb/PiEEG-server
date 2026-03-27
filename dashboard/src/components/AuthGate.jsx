@@ -6,10 +6,21 @@ export default function AuthGate({ children }) {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch("/auth/status", { credentials: "include" })
-      .then((r) => r.json())
-      .then((d) => setState(d.authenticated ? "ok" : "login"))
-      .catch(() => setState("login"));
+    const checkAuth = async () => {
+      try {
+        const r = await fetch("/auth/status", { credentials: "include" });
+        if (!r.ok) {
+          setState("login");
+          return;
+        }
+        const d = await r.json();
+        setState(d.authenticated ? "ok" : "login");
+      } catch (err) {
+        console.error("Auth check error:", err);
+        setState("login");
+      }
+    };
+    checkAuth();
   }, []);
 
   async function handleSubmit(e) {

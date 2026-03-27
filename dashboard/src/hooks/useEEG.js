@@ -144,7 +144,12 @@ export function useEEG(timeWindowSec = 4) {
         const ts = tsRef.current;
         ts.push(now);
         const cutoff = now - 2;
-        while (ts.length > 0 && ts[0] < cutoff) ts.shift();
+        // Efficiently trim old timestamps
+        let readIdx = 0;
+        while (readIdx < ts.length && ts[readIdx] < cutoff) readIdx++;
+        if (readIdx > 0) {
+          ts.splice(0, readIdx);
+        }
 
         // Throttled React state update for header stats
         const wallNow = performance.now();

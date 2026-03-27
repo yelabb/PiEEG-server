@@ -5,9 +5,9 @@ const NUM_CHANNELS = 16;
 const FFT_SIZE = 256;
 const SAMPLE_RATE = 250;
 const MAX_DISPLAY_HZ = 60;
-const FFT_EVERY_FRAMES = 4; // recompute every ~64 ms
+const FFT_EVERY_FRAMES = 8; // recompute every ~128 ms (doubled from 4)
 const SMOOTHING = 0.3;
-const UI_THROTTLE_MS = 200;
+const UI_THROTTLE_MS = 300; // increased from 200 ms
 
 // ── drawing helpers ─────────────────────────────────────────────────────
 
@@ -120,6 +120,10 @@ const SpectralPanel = memo(function SpectralPanel({ eeg }) {
   const frameRef = useRef(0);
   const smoothRef = useRef(null);
   const uiTsRef = useRef(0);
+  const avgBufRef = useRef(null);
+  const bandPowersRef = useRef({});
+  const dprRef = useRef(window.devicePixelRatio || 1);
+  const canvasSizeRef = useRef({ w: 0, h: 0, pw: 0, ph: 0 });
 
   const [channel, setChannel] = useState(0);
   const [logScale, setLogScale] = useState(true);
@@ -130,20 +134,26 @@ const SpectralPanel = memo(function SpectralPanel({ eeg }) {
 
   const fft = useMemo(() => new FftEngine(FFT_SIZE, SAMPLE_RATE), []);
 
+  // Initialize average buffer once
+  if (!avgBufRef.current) {
+    avgBufRef.current = new Float64Array(FFT_SIZE);
+  }
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d", { alpha: false });
 
     const tick = () => {
-      // resize
-      const dpr = window.devicePixelRatio || 1;
+      // Resize only if needed
+      const dpr = dprRef.current;
       const rect = canvas.getBoundingClientRect();
       const w = rect.width;
       const h = rect.height;
       const pw = Math.round(w * dpr);
       const ph = Math.round(h * dpr);
-      if (canvas.width !== pw || canvas.height !== ph) {
+      if (canvasSizeRef.current.pw !== pw || canvasSizeRef.current.ph !== ph) {
+        canvasSizeRef.current = { w, h, pw, ph };
         canvas.width = pw;
         canvas.height = ph;
       }
@@ -164,8 +174,8 @@ const SpectralPanel = memo(function SpectralPanel({ eeg }) {
         if (bufs && count >= FFT_SIZE) {
           let result;
           if (channel === -1) {
-            // average all channels
-            const tmp = new Float64Array(FFT_SIZE);
+            // average all channels — reuse avgBufRef
+            const tmp = avgBufRef.current;
             const bufLen = eeg.bufferSize;
             const start = (wi - FFT_SIZE + bufLen) % bufLen;
             for (let i = 0; i < FFT_SIZE; i++) {
@@ -193,21 +203,30 @@ const SpectralPanel = memo(function SpectralPanel({ eeg }) {
                 s[k] = s[k] * (1 - SMOOTHING) + c[k] * SMOOTHING;
             }
 
-            // throttled React updates
+            // throttled React updates — reuse object references
             const now = performance.now();
             if (now - uiTsRef.current > UI_THROTTLE_MS) {
               uiTsRef.current = now;
-              setBandPowers({ ...result.bandPowers });
+              
+              // Update bandPowers reference only if values changed significantly
+              bandPowersRef.current = result.bandPowers;
+              setBandPowers(result.bandPowers);
+              
               // find dominant band
-              let best = "",
-                bestPow = 0;
+              let best = "";
+              let bestPow = 0;
               for (const b of FREQUENCY_BANDS) {
                 if ((result.bandPowers[b.name] || 0) > bestPow) {
                   bestPow = result.bandPowers[b.name];
                   best = b.name;
                 }
               }
-              setDominant({ band: best, freq: result.dominantFrequency });
+              // Reuse object if values unchanged
+              setDominant((prev) =>
+                prev.band === best && prev.freq === result.dominantFrequency
+                  ? prev
+                  : { band: best, freq: result.dominantFrequency }
+              );
             }
           }
         }

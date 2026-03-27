@@ -35,53 +35,53 @@ function drawChannel(ctx, w, h, buf, count, writeIndex, bufferSize, yRange, colo
 
   if (count < 2) return;
 
-  // Trace — draw every Nth point when buffer is large
+  // Trace — skip points for large buffers
   const skip = count > 2000 ? Math.floor(count / 2000) : 1;
   const halfH = h / 2;
   const xScale = w / (bufferSize - 1);
   const yScale = halfH / yRange;
 
-  // Build path points for reuse
-  const points = [];
+  // Draw gradient fill under trace
+  ctx.beginPath();
+  let firstX = 0;
   for (let i = 0; i < count; i += skip) {
     const idx = (writeIndex - count + i + bufferSize) % bufferSize;
-    points.push({ x: i * xScale, y: mid - buf[idx] * yScale });
+    const x = i * xScale;
+    const y = mid - buf[idx] * yScale;
+    if (i === 0) {
+      ctx.moveTo(x, y);
+      firstX = x;
+    } else {
+      ctx.lineTo(x, y);
+    }
   }
+  const lastI = count - 1;
+  const lastX = lastI * xScale;
+  ctx.lineTo(lastX, h);
+  ctx.lineTo(firstX, h);
+  ctx.closePath();
+  
+  const grad = ctx.createLinearGradient(0, mid - halfH * 0.5, 0, h);
+  grad.addColorStop(0, color + "18");
+  grad.addColorStop(1, color + "00");
+  ctx.fillStyle = grad;
+  ctx.fill();
 
-  // Neon glow effect: draw trace twice — outer glow then crisp line
-  ctx.save();
-  ctx.shadowColor = color;
-  ctx.shadowBlur = 6;
+  // Draw trace line (single pass, optimized styling)
   ctx.strokeStyle = color;
-  ctx.lineWidth = 1.5;
+  ctx.lineWidth = 1.3;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
   ctx.beginPath();
-  for (let i = 0; i < points.length; i++) {
-    i === 0 ? ctx.moveTo(points[i].x, points[i].y) : ctx.lineTo(points[i].x, points[i].y);
-  }
-  ctx.stroke();
-  ctx.restore();
-
-  // Gradient fill under trace
-  if (points.length > 1) {
-    ctx.beginPath();
-    ctx.moveTo(points[0].x, points[0].y);
-    for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
-    ctx.lineTo(points[points.length - 1].x, h);
-    ctx.lineTo(points[0].x, h);
-    ctx.closePath();
-    const grad = ctx.createLinearGradient(0, mid - halfH * 0.5, 0, h);
-    grad.addColorStop(0, color + "18");
-    grad.addColorStop(1, color + "00");
-    ctx.fillStyle = grad;
-    ctx.fill();
-  }
-
-  // Crisp trace on top (no shadow)
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1.2;
-  ctx.beginPath();
-  for (let i = 0; i < points.length; i++) {
-    i === 0 ? ctx.moveTo(points[i].x, points[i].y) : ctx.lineTo(points[i].x, points[i].y);
+  for (let i = 0; i < count; i += skip) {
+    const idx = (writeIndex - count + i + bufferSize) % bufferSize;
+    const x = i * xScale;
+    const y = mid - buf[idx] * yScale;
+    if (i === 0) {
+      ctx.moveTo(x, y);
+    } else {
+      ctx.lineTo(x, y);
+    }
   }
   ctx.stroke();
 
@@ -100,6 +100,8 @@ const ChannelCanvas = memo(function ChannelCanvas({ chIdx, eeg, yRange, expanded
   const rafRef = useRef(0);
   const rmsRef = useRef(0);
   const labelRef = useRef(null);
+  const dprRef = useRef(window.devicePixelRatio || 1);
+  const sizeRef = useRef({ w: 0, h: 0, pw: 0, ph: 0 });
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -107,18 +109,20 @@ const ChannelCanvas = memo(function ChannelCanvas({ chIdx, eeg, yRange, expanded
     const ctx = canvas.getContext("2d", { alpha: false });
 
     const tick = () => {
-      const dpr = window.devicePixelRatio || 1;
+      const dpr = dprRef.current;
       const rect = canvas.getBoundingClientRect();
       const w = rect.width;
       const h = rect.height;
       const pw = Math.round(w * dpr);
       const ph = Math.round(h * dpr);
 
-      if (canvas.width !== pw || canvas.height !== ph) {
+      // Only resize if dimensions changed
+      if (sizeRef.current.pw !== pw || sizeRef.current.ph !== ph) {
+        sizeRef.current = { w, h, pw, ph };
         canvas.width = pw;
         canvas.height = ph;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       }
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
       // Fill background (alpha:false needs explicit fill)
       ctx.fillStyle = "#0d1117";

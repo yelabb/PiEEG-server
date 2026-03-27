@@ -15,6 +15,14 @@ export default defineConfig({
         target: "http://localhost:1617",
         changeOrigin: true,
       },
+      "/api": {
+        target: "http://localhost:1617",
+        changeOrigin: true,
+      },
+      "/recordings": {
+        target: "http://localhost:1617",
+        changeOrigin: true,
+      },
     },
   },
   build: {
