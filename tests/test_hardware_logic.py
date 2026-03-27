@@ -12,7 +12,7 @@ import pytest
 
 from pieeg_server.hardware import (
     SIGN_TEST, FULL_SCALE, FULL_SCALE_PLUS_1, NEGATIVE_OFFSET,
-    VREF_UV, SPIKE_THRESHOLD,
+    VREF_UV, SPIKE_THRESHOLD, SPIKE_RESET_AFTER,
     EXPECTED_STATUS, BYTES_PER_READ,
     CS_PIN, DRDY_PIN, SPI_SPEED_HZ,
     PiEEGHardware,
@@ -55,6 +55,7 @@ class TestSpikeDetection:
         hw = PiEEGHardware.__new__(PiEEGHardware)
         hw._last_valid_value = None
         hw._spike_count = 0
+        hw._consecutive_rejects = 0
         return hw
 
     def _raw_with_last_3(self, b24, b25, b26):
@@ -106,7 +107,7 @@ class TestSpikeDetection:
         hw = self._make_hw()
         hw._is_valid_frame(self._raw_with_last_3(0, 0, 0))  # baseline
 
-        # Produce multiple spikes
+        # Produce multiple spikes (fewer than SPIKE_RESET_AFTER)
         for i in range(5):
             val = 10000 + i * 1000  # all > threshold
             b24 = (val >> 16) & 0xFF
@@ -115,6 +116,33 @@ class TestSpikeDetection:
             hw._is_valid_frame(self._raw_with_last_3(b24, b25, b26))
 
         assert hw._spike_count == 5
+
+    def test_spike_filter_resets_after_consecutive_rejects(self):
+        """After SPIKE_RESET_AFTER consecutive rejects, baseline re-syncs."""
+        hw = self._make_hw()
+        hw._is_valid_frame(self._raw_with_last_3(0, 0, 0))  # baseline at 0
+
+        # Send the same far-away value repeatedly (simulates electrode connect)
+        val = 100_000
+        b24 = (val >> 16) & 0xFF
+        b25 = (val >> 8) & 0xFF
+        b26 = val & 0xFF
+        far_raw = self._raw_with_last_3(b24, b25, b26)
+
+        for i in range(SPIKE_RESET_AFTER - 1):
+            assert hw._is_valid_frame(far_raw) is False
+
+        # The next one triggers the reset and is accepted
+        assert hw._is_valid_frame(far_raw) is True
+        assert hw._consecutive_rejects == 0
+        assert hw._last_valid_value == val
+
+        # Subsequent close values are accepted normally
+        val2 = val + 10
+        b24 = (val2 >> 16) & 0xFF
+        b25 = (val2 >> 8) & 0xFF
+        b26 = val2 & 0xFF
+        assert hw._is_valid_frame(self._raw_with_last_3(b24, b25, b26)) is True
 
     def test_status_header_constant(self):
         """Expected status bytes should be (0xC0, 0x00, 0x08)."""

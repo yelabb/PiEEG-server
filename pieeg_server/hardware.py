@@ -86,6 +86,7 @@ EXPECTED_STATUS = (192, 0, 8)  # 0xC0, 0x00, 0x08
 
 # --- Spike detection (matches not_spike script) ---
 SPIKE_THRESHOLD = 5000  # max allowed jump in raw 24-bit signed value
+SPIKE_RESET_AFTER = 50  # re-sync baseline after this many consecutive rejections
 
 # --- Linux GPIO chardev v1 ioctl constants ---
 # See include/uapi/linux/gpio.h in the Linux kernel source.
@@ -111,6 +112,7 @@ class PiEEGHardware:
         self._spi2 = None
         self._last_valid_value: int | None = None
         self._spike_count = 0
+        self._consecutive_rejects = 0
 
     # --- lifecycle ---
 
@@ -193,10 +195,24 @@ class PiEEGHardware:
 
         if abs(combined - self._last_valid_value) > SPIKE_THRESHOLD:
             self._spike_count += 1
+            self._consecutive_rejects += 1
+            if self._consecutive_rejects >= SPIKE_RESET_AFTER:
+                # Electrode contact likely changed — accept new baseline
+                logger.info(
+                    "Spike filter reset after %d consecutive rejects "
+                    "(old=%d, new=%d)",
+                    self._consecutive_rejects,
+                    self._last_valid_value,
+                    combined,
+                )
+                self._last_valid_value = combined
+                self._consecutive_rejects = 0
+                return True
             logger.debug("Spike detected (count: %d)", self._spike_count)
             return False
 
         self._last_valid_value = combined
+        self._consecutive_rejects = 0
         return True
 
     def wait_for_drdy(self):
