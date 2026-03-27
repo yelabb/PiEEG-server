@@ -14,13 +14,15 @@ import http.cookies
 import json
 import logging
 import mimetypes
+import os
+import re
 from pathlib import Path
 from functools import partial
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler
 import socketserver
 import threading
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlparse
 
 from .auth import AuthManager, COOKIE_NAME
 
@@ -175,6 +177,14 @@ def _make_handler(static_dir: Path, auth: AuthManager):
                 if auth is not None and not self._is_authenticated():
                     return self._send_login()
 
+                # --- Recording API routes ---
+                if self.path == "/api/recordings":
+                    return self._api_list_recordings()
+                if self.path.startswith("/api/recordings/data/"):
+                    return self._api_recording_data()
+                if self.path.startswith("/api/recordings/annotations/"):
+                    return self._api_get_annotations()
+
                 # Download recorded CSV files
                 if self.path.startswith("/recordings/"):
                     return self._serve_recording()
@@ -225,8 +235,97 @@ def _make_handler(static_dir: Path, auth: AuthManager):
             self.end_headers()
             self.wfile.write(data)
 
+        # --- Recording API helpers ---
+
+        def _safe_recording_filename(self):
+            """Extract and validate a recording filename from the URL path."""
+            filename = self.path.rsplit("/", 1)[-1]
+            if not filename or not re.match(r'^[\w\-\.]+\.csv$', filename):
+                return None
+            return filename
+
+        def _recordings_dir(self):
+            return Path.cwd() / "recordings"
+
+        def _api_list_recordings(self):
+            """GET /api/recordings — list all CSV recordings with metadata."""
+            rec_dir = self._recordings_dir()
+            if not rec_dir.is_dir():
+                return self._send_json({"recordings": []})
+            recordings = []
+            for f in sorted(rec_dir.glob("*.csv"), key=lambda p: p.stat().st_mtime, reverse=True):
+                st = f.stat()
+                recordings.append({
+                    "filename": f.name,
+                    "size": st.st_size,
+                    "mtime": st.st_mtime,
+                })
+            return self._send_json({"recordings": recordings})
+
+        def _api_recording_data(self):
+            """GET /api/recordings/data/{filename} — return CSV lines as JSON."""
+            filename = self._safe_recording_filename()
+            if not filename:
+                return self._send_json({"error": "Invalid filename"}, 400)
+            rec_dir = self._recordings_dir()
+            file_path = (rec_dir / filename).resolve()
+            if not str(file_path).startswith(str(rec_dir.resolve())):
+                return self._send_json({"error": "Forbidden"}, 403)
+            if not file_path.is_file():
+                return self._send_json({"error": "Not found"}, 404)
+            try:
+                lines = file_path.read_text().splitlines()
+            except OSError:
+                return self._send_json({"error": "Read error"}, 500)
+            return self._send_json({"data": lines})
+
+        def _api_get_annotations(self):
+            """GET /api/recordings/annotations/{filename} — load annotation JSON."""
+            filename = self._safe_recording_filename()
+            if not filename:
+                return self._send_json({"error": "Invalid filename"}, 400)
+            rec_dir = self._recordings_dir()
+            anno_file = (rec_dir / (filename + ".annotations.json")).resolve()
+            if not str(anno_file).startswith(str(rec_dir.resolve())):
+                return self._send_json({"error": "Forbidden"}, 403)
+            if not anno_file.is_file():
+                return self._send_json({"annotations": []})
+            try:
+                data = json.loads(anno_file.read_text())
+            except (OSError, json.JSONDecodeError):
+                return self._send_json({"annotations": []})
+            return self._send_json(data)
+
+        def _api_save_annotations(self):
+            """POST /api/recordings/annotations/{filename} — save annotations."""
+            filename = self._safe_recording_filename()
+            if not filename:
+                return self._send_json({"error": "Invalid filename"}, 400)
+            rec_dir = self._recordings_dir()
+            csv_path = (rec_dir / filename).resolve()
+            if not str(csv_path).startswith(str(rec_dir.resolve())):
+                return self._send_json({"error": "Forbidden"}, 403)
+            if not csv_path.is_file():
+                return self._send_json({"error": "Recording not found"}, 404)
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length).decode("utf-8", errors="replace")
+            try:
+                data = json.loads(body)
+            except (json.JSONDecodeError, TypeError):
+                return self._send_json({"error": "Invalid JSON"}, 400)
+            anno_file = (rec_dir / (filename + ".annotations.json")).resolve()
+            try:
+                anno_file.write_text(json.dumps(data, indent=2))
+            except OSError:
+                return self._send_json({"error": "Write error"}, 500)
+            return self._send_json({"ok": True})
+
         def do_POST(self):
             try:
+                # Annotation save route
+                if self.path.startswith("/api/recordings/annotations/"):
+                    return self._api_save_annotations()
+
                 if self.path != "/auth":
                     self.send_error(404)
                     return

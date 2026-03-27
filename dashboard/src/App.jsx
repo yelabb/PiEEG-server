@@ -4,6 +4,8 @@ import AuthGate from "./components/AuthGate";
 import ChannelCanvas from "./components/ChannelCanvas";
 import SpectralPanel from "./components/SpectralPanel";
 import PerformanceMonitor from "./components/PerformanceMonitor";
+import SessionList from "./components/SessionList";
+import SessionViewer from "./components/SessionViewer";
 
 const NUM_CHANNELS = 16;
 
@@ -22,6 +24,8 @@ const TIME_OPTIONS = [
 ];
 
 export default function App() {
+  const [view, setView] = useState("live"); // "live" | "sessions" | "playback"
+  const [selectedSession, setSelectedSession] = useState(null);
   const [paused, setPaused] = useState(false);
   const [showFFT, setShowFFT] = useState(true);
   const [filterEnabled, setFilterEnabled] = useState(false);
@@ -77,8 +81,16 @@ export default function App() {
   // Keyboard shortcuts
   useEffect(() => {
     function onKey(e) {
-      // Skip when user is typing in an input/select
-      if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+      // Skip when user is typing in an input/select/textarea
+      if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT" || e.target.tagName === "TEXTAREA") return;
+      // Only handle shortcuts in live view
+      if (view !== "live") {
+        if (e.code === "Escape") {
+          if (view === "playback") { setView("sessions"); setSelectedSession(null); }
+          else if (view === "sessions") setView("live");
+        }
+        return;
+      }
       switch (e.code) {
         case "Space":
           e.preventDefault();
@@ -98,7 +110,30 @@ export default function App() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [expandedCh, eeg.recordResult]);
+  }, [expandedCh, eeg.recordResult, view]);
+
+  // --- Sessions / Playback views ---
+  if (view === "playback" && selectedSession) {
+    return (
+      <AuthGate>
+        <SessionViewer
+          filename={selectedSession}
+          onBack={() => { setView("sessions"); setSelectedSession(null); }}
+        />
+      </AuthGate>
+    );
+  }
+
+  if (view === "sessions") {
+    return (
+      <AuthGate>
+        <SessionList
+          onSelect={(filename) => { setSelectedSession(filename); setView("playback"); }}
+          onBack={() => setView("live")}
+        />
+      </AuthGate>
+    );
+  }
 
   return (
     <AuthGate>
@@ -150,6 +185,12 @@ export default function App() {
           onClick={() => setShowFFT((v) => !v)}
         >
           FFT {showFFT ? "ON" : "OFF"}
+        </button>
+        <button
+          className="btn btn-sessions"
+          onClick={() => setView("sessions")}
+        >
+          Sessions
         </button>
         <div className="sep" />
         <div className="control-group">
@@ -271,6 +312,17 @@ export default function App() {
               >
                 Download CSV
               </a>
+              <button
+                className="btn modal-btn-view"
+                onClick={() => {
+                  const fn = eeg.recordResult.filename;
+                  eeg.dismissRecordResult();
+                  setSelectedSession(fn);
+                  setView("playback");
+                }}
+              >
+                View Session
+              </button>
               <button
                 className="btn modal-btn-dismiss"
                 onClick={eeg.dismissRecordResult}
