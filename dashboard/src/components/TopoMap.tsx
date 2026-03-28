@@ -8,14 +8,15 @@ import { NUM_CHANNELS, SAMPLE_RATE } from "../types";
 //
 // Interpolates per-channel band-power values from electrode positions onto
 // a 2D head silhouette using inverse-distance weighting (IDW).
-// Renders on HTML Canvas for 60 fps performance.
+// Renders heatmap into an ImageData buffer (single putImageData per frame)
+// instead of thousands of fillRect calls.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const FFT_SIZE = 256;
-const FFT_EVERY_FRAMES = 16; // compute FFT every Nth RAF frame
-const IDW_POWER = 2.5;       // inverse-distance weighting exponent
-const GRID_RES = 64;         // interpolation grid resolution
-const SMOOTHING = 0.3;       // exponential smoothing for values
+const CHANNELS_PER_FRAME = 4; // stagger FFT: 4 ch per frame → 4 frames for all 16
+const IDW_POWER = 2.5;
+const GRID_RES = 64;
+const SMOOTHING = 0.25;
 
 type TopomapMetric = "Alpha" | "Beta" | "Theta" | "Delta" | "Gamma" | "Total";
 
@@ -28,10 +29,6 @@ const METRICS: { key: TopomapMetric; label: string }[] = [
   { key: "Total", label: "Σ Total" },
 ];
 
-// ── Standard 10-20 electrode positions normalised to unit circle ──────────
-// (0,0) = centre of head, radius 1 = scalp edge
-// x: −1 (left) → +1 (right),  y: −1 (front) → +1 (back)
-// 16-channel layout matching typical PiEEG-16 montage.
 interface ElectrodePos {
   label: string;
   x: number;
@@ -57,120 +54,126 @@ const ELECTRODES_16: ElectrodePos[] = [
   { label: "O2",  x:  0.25, y:  0.85 },
 ];
 
-// ── Heatmap gradient colours (low → high) ─────────────────────────────────
-const GRADIENT_COLORS = [
-  [6,  10,  20],  // abyss
-  [11, 37,  58],  // deep sea
-  [18, 92, 109],  // teal dark
-  [0,  230, 118], // bioluminescent green
-  [255, 215, 64], // amber
-  [255, 82,  82], // red hot
-  [255, 255, 255],// white — peak
+// ── Precomputed gradient LUT (256 entries → zero allocs during render) ────
+const GRADIENT_STOPS = [
+  [6,  10,  20],
+  [11, 37,  58],
+  [18, 92, 109],
+  [0,  230, 118],
+  [255, 215, 64],
+  [255, 82,  82],
+  [255, 255, 255],
 ];
 
-function sampleGradient(t: number): [number, number, number] {
-  if (t <= 0) return GRADIENT_COLORS[0] as [number, number, number];
-  if (t >= 1) return GRADIENT_COLORS[GRADIENT_COLORS.length - 1] as [number, number, number];
-  const n = GRADIENT_COLORS.length - 1;
-  const seg = t * n;
-  const i = Math.min(Math.floor(seg), n - 1);
-  const frac = seg - i;
-  const a = GRADIENT_COLORS[i];
-  const b = GRADIENT_COLORS[i + 1];
-  return [
-    a[0] + (b[0] - a[0]) * frac,
-    a[1] + (b[1] - a[1]) * frac,
-    a[2] + (b[2] - a[2]) * frac,
-  ];
+const LUT_SIZE = 256;
+const GRAD_R = new Uint8Array(LUT_SIZE);
+const GRAD_G = new Uint8Array(LUT_SIZE);
+const GRAD_B = new Uint8Array(LUT_SIZE);
+
+(function buildLUT() {
+  const n = GRADIENT_STOPS.length - 1;
+  for (let i = 0; i < LUT_SIZE; i++) {
+    const t = i / (LUT_SIZE - 1);
+    const seg = t * n;
+    const idx = Math.min(Math.floor(seg), n - 1);
+    const frac = seg - idx;
+    const a = GRADIENT_STOPS[idx];
+    const b = GRADIENT_STOPS[idx + 1];
+    GRAD_R[i] = (a[0] + (b[0] - a[0]) * frac) | 0;
+    GRAD_G[i] = (a[1] + (b[1] - a[1]) * frac) | 0;
+    GRAD_B[i] = (a[2] + (b[2] - a[2]) * frac) | 0;
+  }
+})();
+
+// ── Precompute IDW grid (runs once, reused every frame) ───────────────────
+interface GridData {
+  // Flat interleaved weights: for each inside cell, NUM_CHANNELS weights
+  // stored contiguously. exactElectrode[i] >= 0 means use that channel directly.
+  cellCount: number;
+  cellIndex: Int32Array;       // grid-linear-index for each inside cell
+  edgeFade: Float64Array;      // [cellCount]
+  nx: Float64Array;            // [cellCount] normalised x
+  ny: Float64Array;            // [cellCount] normalised y
+  weights: Float64Array;       // [cellCount * numElectrodes] — pre-normalised
+  exactElectrode: Int16Array;  // [cellCount] — -1 if interpolated, else electrode idx
 }
 
-// ── Precompute IDW grid (electrode coords don't change) ───────────────────
-// For each grid cell, store per-electrode weights so we avoid recomputing sqrt
-// every frame.
-interface GridWeights {
-  weights: Float64Array[];  // [gridIdx][electrodeIdx]
-  inside: boolean[];        // whether grid cell is inside head circle
-  edgeFade: Float64Array;   // alpha fade at edge
-  nx: Float64Array;         // normalised x per grid cell
-  ny: Float64Array;         // normalised y per grid cell
-}
-
-function precomputeGrid(electrodes: ElectrodePos[], resolution: number): GridWeights {
+function precomputeGrid(electrodes: ElectrodePos[], resolution: number): GridData {
   const total = resolution * resolution;
-  const weights: Float64Array[] = new Array(total);
-  const inside: boolean[] = new Array(total);
-  const edgeFade = new Float64Array(total);
-  const nx = new Float64Array(total);
-  const ny = new Float64Array(total);
+  const numE = electrodes.length;
+
+  // First pass: count inside cells
+  const tmpInside: number[] = [];
+  const tmpNx: number[] = [];
+  const tmpNy: number[] = [];
+  const tmpFade: number[] = [];
+  const tmpExact: number[] = [];
+  const tmpWeights: number[][] = [];
 
   for (let gy = 0; gy < resolution; gy++) {
     for (let gx = 0; gx < resolution; gx++) {
-      const idx = gy * resolution + gx;
       const px = -1.0 + 2.0 * (gx + 0.5) / resolution;
       const py = -1.0 + 2.0 * (gy + 0.5) / resolution;
       const dist = Math.sqrt(px * px + py * py);
+      if (dist > 1.05) continue;
 
-      nx[idx] = px;
-      ny[idx] = py;
+      tmpInside.push(gy * resolution + gx);
+      tmpNx.push(px);
+      tmpNy.push(py);
+      tmpFade.push(dist > 0.92 ? (1.05 - dist) / 0.13 : 1.0);
 
-      if (dist > 1.05) {
-        inside[idx] = false;
-        edgeFade[idx] = 0;
-        weights[idx] = new Float64Array(0);
-        continue;
-      }
-
-      inside[idx] = true;
-      edgeFade[idx] = dist > 0.92 ? ((1.05 - dist) / 0.13) : 1.0;
-
-      const w = new Float64Array(electrodes.length);
+      const w = new Array(numE);
       let exact = -1;
-      for (let e = 0; e < electrodes.length; e++) {
+      let wSum = 0;
+      for (let e = 0; e < numE; e++) {
         const dx = px - electrodes[e].x;
         const dy = py - electrodes[e].y;
         const d = Math.sqrt(dx * dx + dy * dy);
         if (d < 0.001) { exact = e; break; }
-        w[e] = 1.0 / Math.pow(d, IDW_POWER);
+        w[e] = 1.0 / (d ** IDW_POWER);
+        wSum += w[e];
       }
 
       if (exact >= 0) {
-        // Mark exact hit: store -1 in first slot, electrode index in second
-        const ew = new Float64Array(electrodes.length);
-        ew[exact] = -1; // sentinel
-        weights[idx] = ew;
+        tmpExact.push(exact);
+        tmpWeights.push(new Array(numE).fill(0));
       } else {
-        // Normalise weights
-        let wSum = 0;
-        for (let e = 0; e < electrodes.length; e++) wSum += w[e];
-        if (wSum > 0) {
-          for (let e = 0; e < electrodes.length; e++) w[e] /= wSum;
-        }
-        weights[idx] = w;
+        tmpExact.push(-1);
+        for (let e = 0; e < numE; e++) w[e] /= wSum;
+        tmpWeights.push(w);
       }
     }
   }
 
-  return { weights, inside, edgeFade, nx, ny };
+  const cellCount = tmpInside.length;
+  const cellIndex = new Int32Array(tmpInside);
+  const edgeFade = new Float64Array(tmpFade);
+  const nx = new Float64Array(tmpNx);
+  const ny = new Float64Array(tmpNy);
+  const exactElectrode = new Int16Array(tmpExact);
+  const weights = new Float64Array(cellCount * numE);
+  for (let c = 0; c < cellCount; c++) {
+    const off = c * numE;
+    const w = tmpWeights[c];
+    for (let e = 0; e < numE; e++) weights[off + e] = w[e];
+  }
+
+  return { cellCount, cellIndex, edgeFade, nx, ny, weights, exactElectrode };
 }
 
-// ── Canvas drawing ────────────────────────────────────────────────────────
+// ── Fast heatmap render into ImageData ────────────────────────────────────
 
-function drawTopomap(
-  ctx: CanvasRenderingContext2D,
-  w: number, h: number,
+function renderHeatmapImage(
+  imgData: ImageData,
+  imgRes: number,
   values: number[],
-  electrodes: ElectrodePos[],
-  grid: GridWeights,
-  resolution: number,
+  grid: GridData,
+  gridRes: number,
+  numElectrodes: number,
 ) {
-  if (values.length === 0) return;
-
-  const side = Math.min(w, h);
-  const cx = w / 2;
-  const cy = h / 2;
-  const headR = side * 0.40; // 82% of half-side
-  const cellW = (headR * 2) / resolution;
-  const cellH = (headR * 2) / resolution;
+  // Clear to background (0d1117 = 13,17,23)
+  const data = imgData.data;
+  data.fill(0);
 
   // Value range
   let vMin = Infinity, vMax = -Infinity;
@@ -180,52 +183,82 @@ function drawTopomap(
   }
   if (vMax <= vMin) vMax = vMin + 1;
   const vRange = vMax - vMin;
+  const lutScale = (LUT_SIZE - 1) / vRange;
 
-  // ── Interpolated heatmap ──────────────────────────────────────────────
-  for (let gy = 0; gy < resolution; gy++) {
-    for (let gx = 0; gx < resolution; gx++) {
-      const idx = gy * resolution + gx;
-      if (!grid.inside[idx]) continue;
+  const cellPx = imgRes / gridRes; // pixels per grid cell
 
-      const wArr = grid.weights[idx];
-      let interpolated = 0;
+  for (let c = 0; c < grid.cellCount; c++) {
+    const gi = grid.cellIndex[c];
+    const gy = (gi / gridRes) | 0;
+    const gx = gi - gy * gridRes;
 
-      // Check for exact hit sentinel
-      let exact = false;
-      for (let e = 0; e < wArr.length; e++) {
-        if (wArr[e] === -1) {
-          interpolated = values[e] ?? 0;
-          exact = true;
-          break;
-        }
+    let interpolated: number;
+    const exact = grid.exactElectrode[c];
+    if (exact >= 0) {
+      interpolated = values[exact];
+    } else {
+      interpolated = 0;
+      const off = c * numElectrodes;
+      for (let e = 0; e < numElectrodes; e++) {
+        interpolated += grid.weights[off + e] * values[e];
       }
+    }
 
-      if (!exact) {
-        for (let e = 0; e < wArr.length && e < values.length; e++) {
-          interpolated += wArr[e] * values[e];
-        }
+    const lutIdx = Math.max(0, Math.min(LUT_SIZE - 1,
+      ((interpolated - vMin) * lutScale) | 0));
+    const alpha = (grid.edgeFade[c] * 255) | 0;
+    const r = GRAD_R[lutIdx];
+    const g = GRAD_G[lutIdx];
+    const b = GRAD_B[lutIdx];
+
+    // Fill the cell's pixels in the image
+    const px0 = (gx * cellPx) | 0;
+    const py0 = (gy * cellPx) | 0;
+    const px1 = Math.min(((gx + 1) * cellPx) | 0, imgRes);
+    const py1 = Math.min(((gy + 1) * cellPx) | 0, imgRes);
+
+    for (let py = py0; py < py1; py++) {
+      let off = (py * imgRes + px0) * 4;
+      for (let px = px0; px < px1; px++) {
+        data[off]     = r;
+        data[off + 1] = g;
+        data[off + 2] = b;
+        data[off + 3] = alpha;
+        off += 4;
       }
-
-      const norm = Math.max(0, Math.min(1, (interpolated - vMin) / vRange));
-      const alpha = grid.edgeFade[idx];
-      const [r, g, b] = sampleGradient(norm);
-
-      const px = cx + grid.nx[idx] * headR - cellW / 2;
-      const py = cy + grid.ny[idx] * headR - cellH / 2;
-
-      ctx.fillStyle = `rgba(${r | 0},${g | 0},${b | 0},${alpha.toFixed(2)})`;
-      ctx.fillRect(px, py, cellW + 0.5, cellH + 0.5);
     }
   }
+}
 
-  // ── Head outline ──────────────────────────────────────────────────────
+// ── Overlay drawing (head, electrodes, legend) ────────────────────────────
+
+function drawOverlay(
+  ctx: CanvasRenderingContext2D,
+  w: number, h: number,
+  values: number[],
+  electrodes: ElectrodePos[],
+) {
+  const side = Math.min(w, h);
+  const cx = w / 2;
+  const cy = h / 2;
+  const headR = side * 0.40;
+
+  let vMin = Infinity, vMax = -Infinity;
+  for (let i = 0; i < values.length; i++) {
+    if (values[i] < vMin) vMin = values[i];
+    if (values[i] > vMax) vMax = values[i];
+  }
+  if (vMax <= vMin) vMax = vMin + 1;
+  const vRange = vMax - vMin;
+
+  // Head outline
   ctx.strokeStyle = "rgba(255,255,255,0.25)";
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   ctx.arc(cx, cy, headR, 0, Math.PI * 2);
   ctx.stroke();
 
-  // ── Nose indicator ────────────────────────────────────────────────────
+  // Nose
   ctx.beginPath();
   ctx.moveTo(cx - headR * 0.08, cy - headR);
   ctx.lineTo(cx, cy - headR - headR * 0.12);
@@ -235,36 +268,43 @@ function drawTopomap(
   ctx.lineJoin = "round";
   ctx.stroke();
 
-  // ── Ear indicators ────────────────────────────────────────────────────
-  drawEar(ctx, cx - headR, cy, headR, true);
-  drawEar(ctx, cx + headR, cy, headR, false);
+  // Ears
+  for (const isLeft of [true, false]) {
+    const x = isLeft ? cx - headR : cx + headR;
+    const sign = isLeft ? -1 : 1;
+    ctx.beginPath();
+    ctx.moveTo(x, cy - headR * 0.12);
+    ctx.quadraticCurveTo(x + sign * headR * 0.08, cy, x, cy + headR * 0.12);
+    ctx.strokeStyle = "rgba(255,255,255,0.2)";
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+  }
 
-  // ── Electrode markers ─────────────────────────────────────────────────
+  // Electrode markers
   for (let i = 0; i < electrodes.length && i < values.length; i++) {
     const ex = cx + electrodes[i].x * headR;
     const ey = cy + electrodes[i].y * headR;
-    const norm = Math.max(0, Math.min(1, (values[i] - vMin) / vRange));
-    const [r, g, b] = sampleGradient(norm);
+    const lutIdx = Math.max(0, Math.min(LUT_SIZE - 1,
+      (((values[i] - vMin) / vRange) * (LUT_SIZE - 1)) | 0));
+    const r = GRAD_R[lutIdx], g = GRAD_G[lutIdx], b = GRAD_B[lutIdx];
 
     // Glow
     ctx.beginPath();
     ctx.arc(ex, ey, 5, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(${r | 0},${g | 0},${b | 0},0.4)`;
-    ctx.shadowColor = `rgba(${r | 0},${g | 0},${b | 0},0.6)`;
+    ctx.fillStyle = `rgba(${r},${g},${b},0.4)`;
+    ctx.shadowColor = `rgba(${r},${g},${b},0.6)`;
     ctx.shadowBlur = 6;
     ctx.fill();
     ctx.shadowBlur = 0;
 
-    // White dot
+    // Dot
     ctx.beginPath();
     ctx.arc(ex, ey, 3, 0, Math.PI * 2);
     ctx.fillStyle = "rgba(255,255,255,0.9)";
     ctx.fill();
-
-    // Colored center
     ctx.beginPath();
     ctx.arc(ex, ey, 2, 0, Math.PI * 2);
-    ctx.fillStyle = `rgb(${r | 0},${g | 0},${b | 0})`;
+    ctx.fillStyle = `rgb(${r},${g},${b})`;
     ctx.fill();
 
     // Label
@@ -274,45 +314,18 @@ function drawTopomap(
     ctx.fillText(electrodes[i].label, ex, ey + 10);
   }
 
-  // ── Colour bar legend ─────────────────────────────────────────────────
-  drawColourBar(ctx, w, h, vMin, vMax);
-}
-
-function drawEar(
-  ctx: CanvasRenderingContext2D,
-  x: number, y: number, headR: number, isLeft: boolean,
-) {
-  const sign = isLeft ? -1 : 1;
-  ctx.beginPath();
-  ctx.moveTo(x, y - headR * 0.12);
-  ctx.quadraticCurveTo(x + sign * headR * 0.08, y, x, y + headR * 0.12);
-  ctx.strokeStyle = "rgba(255,255,255,0.2)";
-  ctx.lineWidth = 1.2;
-  ctx.stroke();
-}
-
-function drawColourBar(
-  ctx: CanvasRenderingContext2D,
-  w: number, h: number, vMin: number, vMax: number,
-) {
-  const barW = 10;
-  const barH = h * 0.5;
-  const barX = w - barW - 8;
-  const barY = (h - barH) / 2;
-
+  // Colour bar
+  const barW = 10, barH = h * 0.5;
+  const barX = w - barW - 8, barY = (h - barH) / 2;
   for (let i = 0; i < barH; i++) {
-    const t = 1.0 - i / barH; // top = high
-    const [r, g, b] = sampleGradient(t);
-    ctx.fillStyle = `rgb(${r | 0},${g | 0},${b | 0})`;
+    const lutIdx = Math.max(0, Math.min(LUT_SIZE - 1,
+      ((1.0 - i / barH) * (LUT_SIZE - 1)) | 0));
+    ctx.fillStyle = `rgb(${GRAD_R[lutIdx]},${GRAD_G[lutIdx]},${GRAD_B[lutIdx]})`;
     ctx.fillRect(barX, barY + i, barW, 1);
   }
-
-  // Border
   ctx.strokeStyle = "rgba(255,255,255,0.15)";
   ctx.lineWidth = 0.5;
   ctx.strokeRect(barX, barY, barW, barH);
-
-  // Labels
   ctx.fillStyle = "rgba(255,255,255,0.4)";
   ctx.font = "7px monospace";
   ctx.textAlign = "right";
@@ -321,6 +334,8 @@ function drawColourBar(
 }
 
 // ── Component ─────────────────────────────────────────────────────────────
+
+const IMG_RES = GRID_RES * 4; // 256px ImageData buffer for the heatmap
 
 interface TopoMapProps {
   eegData: EEGData;
@@ -333,9 +348,12 @@ const TopoMap = memo(function TopoMap({ eegData }: TopoMapProps) {
   const dprRef = useRef(window.devicePixelRatio || 1);
   const needsResizeRef = useRef(true);
   const sizeRef = useRef({ w: 0, h: 0, pw: 0, ph: 0 });
-  const valuesRef = useRef<number[]>(new Array(NUM_CHANNELS).fill(0));
   const smoothedRef = useRef<number[]>(new Array(NUM_CHANNELS).fill(0));
-  const bandPowersRef = useRef<BandPowers>({});
+  const rawValuesRef = useRef<number[]>(new Array(NUM_CHANNELS).fill(0));
+  const fftSlotRef = useRef(0); // which channel batch to FFT this frame
+  const imgDataRef = useRef<ImageData | null>(null);
+  const avgBPRef = useRef<BandPowers>({});
+  const uiTsRef = useRef(0);
 
   const [metric, setMetric] = useState<TopomapMetric>("Alpha");
   const [paused, setPaused] = useState(false);
@@ -343,12 +361,23 @@ const TopoMap = memo(function TopoMap({ eegData }: TopoMapProps) {
   const [dominant, setDominant] = useState({ band: "", freq: 0 });
 
   const fft = useMemo(() => new FftEngine(FFT_SIZE, SAMPLE_RATE), []);
-  const precomputed = useMemo(() => precomputeGrid(ELECTRODES_16, GRID_RES), []);
+  const grid = useMemo(() => precomputeGrid(ELECTRODES_16, GRID_RES), []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d", { alpha: false })!;
+
+    // Persistent offscreen canvas for heatmap ImageData blitting
+    const offscreen = document.createElement("canvas");
+    offscreen.width = IMG_RES;
+    offscreen.height = IMG_RES;
+    const offCtx = offscreen.getContext("2d")!;
+
+    // Persistent ImageData buffer (created once, reused every frame)
+    if (!imgDataRef.current || imgDataRef.current.width !== IMG_RES) {
+      imgDataRef.current = new ImageData(IMG_RES, IMG_RES);
+    }
 
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
@@ -384,68 +413,86 @@ const TopoMap = memo(function TopoMap({ eegData }: TopoMapProps) {
 
       frameRef.current++;
 
-      // ── FFT per channel every Nth frame ──────────────────────────────
-      if (!paused && frameRef.current % FFT_EVERY_FRAMES === 0) {
+      // ── Staggered FFT: process CHANNELS_PER_FRAME channels each frame ──
+      if (!paused) {
         const bufs = eegData.buffers.current;
         const wi = eegData.writeIndex.current;
         const count = eegData.samplesInBuffer.current;
 
         if (bufs && count >= FFT_SIZE) {
-          const newValues = valuesRef.current;
-          let anyResult = false;
-          let bestBand = "";
-          let bestPow = 0;
-          let domFreq = 0;
-          const avgBP: BandPowers = {};
+          const slot = fftSlotRef.current;
+          const start = slot * CHANNELS_PER_FRAME;
+          const end = Math.min(start + CHANNELS_PER_FRAME, NUM_CHANNELS);
+          const raw = rawValuesRef.current;
+          const sm = smoothedRef.current;
+          const avgBP = avgBPRef.current;
 
-          for (let ch = 0; ch < NUM_CHANNELS; ch++) {
+          for (let ch = start; ch < end; ch++) {
             const result = fft.analyseRing(bufs[ch], wi, count);
             if (!result) continue;
-            anyResult = true;
 
-            if (metric === "Total") {
-              newValues[ch] = result.totalPower;
-            } else {
-              newValues[ch] = result.bandPowers[metric] || 0;
-            }
+            raw[ch] = metric === "Total" ? result.totalPower : (result.bandPowers[metric] || 0);
+            sm[ch] = sm[ch] * (1 - SMOOTHING) + raw[ch] * SMOOTHING;
 
-            // Accumulate band powers for display
             for (const band of FREQUENCY_BANDS) {
-              avgBP[band.name] = (avgBP[band.name] || 0) + (result.bandPowers[band.name] || 0);
+              // Running average: replace this channel's contribution
+              avgBP[band.name] = (avgBP[band.name] || 0)
+                - (avgBP[`_ch${ch}_${band.name}`] || 0)
+                + (result.bandPowers[band.name] || 0);
+              (avgBP as Record<string, number>)[`_ch${ch}_${band.name}`] =
+                result.bandPowers[band.name] || 0;
             }
           }
 
-          if (anyResult) {
-            // Average band powers across channels
+          fftSlotRef.current = (slot + 1) % Math.ceil(NUM_CHANNELS / CHANNELS_PER_FRAME);
+
+          // Update React state at most every 400ms
+          const now = performance.now();
+          if (now - uiTsRef.current > 400) {
+            uiTsRef.current = now;
+            const displayBP: BandPowers = {};
+            let bestBand = "";
+            let bestPow = 0;
             for (const band of FREQUENCY_BANDS) {
-              avgBP[band.name] = (avgBP[band.name] || 0) / NUM_CHANNELS;
-              if ((avgBP[band.name] || 0) > bestPow) {
-                bestPow = avgBP[band.name];
+              displayBP[band.name] = (avgBP[band.name] || 0) / NUM_CHANNELS;
+              if (displayBP[band.name] > bestPow) {
+                bestPow = displayBP[band.name];
                 bestBand = band.name;
               }
             }
-
-            // Smooth values
-            const sm = smoothedRef.current;
-            for (let ch = 0; ch < NUM_CHANNELS; ch++) {
-              sm[ch] = sm[ch] * (1 - SMOOTHING) + newValues[ch] * SMOOTHING;
-            }
-
-            // Throttled React state updates
-            bandPowersRef.current = avgBP;
-            setBandPowers(avgBP);
+            setBandPowers(displayBP);
             setDominant((prev) =>
-              prev.band === bestBand ? prev : { band: bestBand, freq: domFreq }
+              prev.band === bestBand ? prev : { band: bestBand, freq: 0 }
             );
           }
         }
       }
 
-      // ── Draw topomap ────────────────────────────────────────────────
+      // ── Draw topomap via ImageData ──────────────────────────────────
       const sm = smoothedRef.current;
       const hasData = sm.some((v) => v !== 0);
       if (hasData) {
-        drawTopomap(ctx, w, h, sm, ELECTRODES_16, precomputed, GRID_RES);
+        const imgData = imgDataRef.current!;
+        renderHeatmapImage(imgData, IMG_RES, sm, grid, GRID_RES, NUM_CHANNELS);
+
+        // Blit to offscreen canvas, then draw scaled to main canvas
+        offCtx.putImageData(imgData, 0, 0);
+
+        const side = Math.min(w, h);
+        const headR = side * 0.40;
+        const cx = w / 2;
+        const cy = h / 2;
+        const drawSize = headR * 2.1;
+
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = "high";
+        ctx.drawImage(
+          offscreen,
+          0, 0, IMG_RES, IMG_RES,
+          cx - drawSize / 2, cy - drawSize / 2, drawSize, drawSize,
+        );
+
+        drawOverlay(ctx, w, h, sm, ELECTRODES_16);
       } else {
         ctx.fillStyle = "#4b5563";
         ctx.font = "13px monospace";
@@ -462,7 +509,7 @@ const TopoMap = memo(function TopoMap({ eegData }: TopoMapProps) {
       cancelAnimationFrame(rafRef.current);
       observer.disconnect();
     };
-  }, [eegData, metric, paused, fft, precomputed]);
+  }, [eegData, metric, paused, fft, grid]);
 
   const dominantColor =
     FREQUENCY_BANDS.find((b) => b.name === dominant.band)?.color || "#8b949e";
