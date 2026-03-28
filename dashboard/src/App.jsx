@@ -7,6 +7,7 @@ import PerformanceMonitor from "./components/PerformanceMonitor";
 import SessionList from "./components/SessionList";
 import SessionViewer from "./components/SessionViewer";
 import XRWaveView from "./components/XRWaveView";
+import UpdateBanner from "./components/UpdateBanner";
 
 const NUM_CHANNELS = 16;
 const ALL_CHANNELS = new Set(Array.from({ length: NUM_CHANNELS }, (_, i) => i));
@@ -177,6 +178,7 @@ export default function App() {
 
   return (
     <AuthGate>
+      <UpdateBanner />
       {/* Header */}
       <header className="header">
         <h1>
