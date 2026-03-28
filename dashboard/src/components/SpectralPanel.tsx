@@ -267,9 +267,9 @@ const SpectralPanel = memo(function SpectralPanel({ eegData }: SpectralPanelProp
     <div className="spectral-panel">
       <div className="spectral-toolbar">
         <span className="spectral-title">
-          Spectral Analysis{" "}
+          Spectral{" "}
           <small style={{ color: "var(--text-dim)", fontWeight: 400 }}>
-            — {chLabel}
+            {chLabel}
           </small>
         </span>
         <div className="spectral-channels">
@@ -289,6 +289,10 @@ const SpectralPanel = memo(function SpectralPanel({ eegData }: SpectralPanelProp
             </button>
           ))}
         </div>
+        <span className="sp-dominant">
+          <strong style={{ color: dominantColor }}>{dominant.band || "—"}</strong>{" "}
+          {dominant.freq > 0 && <small>{dominant.freq.toFixed(1)} Hz</small>}
+        </span>
         <div className="spectral-ctrls">
           <button
             className={`btn${logScale ? " active" : ""}`}
@@ -324,15 +328,10 @@ const SpectralPanel = memo(function SpectralPanel({ eegData }: SpectralPanelProp
               className={`sp-band${active ? " selected" : ""}`}
               onClick={() => setSelectedBand(active ? null : band.name)}
             >
-              <div className="sp-band-head">
-                <span className="sp-band-dot" style={{ background: band.color }} />
-                <span className="sp-band-name" style={{ color: band.color }}>
-                  {band.label}
-                </span>
-                <span className="sp-band-hz">
-                  {band.low}–{band.high} Hz
-                </span>
-              </div>
+              <span className="sp-band-dot" style={{ background: band.color }} />
+              <span className="sp-band-name" style={{ color: band.color }}>
+                {band.label}
+              </span>
               <div className="sp-band-track">
                 <div
                   className="sp-band-fill"
@@ -345,18 +344,6 @@ const SpectralPanel = memo(function SpectralPanel({ eegData }: SpectralPanelProp
             </div>
           );
         })}
-      </div>
-
-      <div className="spectral-footer">
-        <span>
-          Dominant:{" "}
-          <strong style={{ color: dominantColor }}>{dominant.band}</strong>{" "}
-          ({dominant.freq.toFixed(1)} Hz)
-        </span>
-        <span>
-          {FFT_SIZE} pt · {SAMPLE_RATE} Hz ·{" "}
-          {(SAMPLE_RATE / FFT_SIZE).toFixed(1)} Hz/bin
-        </span>
       </div>
     </div>
   );

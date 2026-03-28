@@ -609,7 +609,8 @@ body {
 
 .spectral-canvas-wrap {
   position: relative;
-  height: 160px;
+  flex: 1;
+  min-height: 100px;
   background: var(--bg);
 }
 .spectral-paused {
@@ -626,17 +627,22 @@ body {
 }
 
 .spectral-bands {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 8px;
-  padding: 8px 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  padding: 4px 12px;
 }
 .sp-band {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   cursor: pointer;
-  padding: 4px 6px;
+  padding: 2px 4px;
   border-radius: 4px;
   border: 1px solid transparent;
   transition: all 0.15s;
+  flex: 1 1 0;
+  min-width: 0;
 }
 .sp-band:hover {
   background: rgba(255, 255, 255, 0.03);
@@ -645,12 +651,6 @@ body {
   border-color: rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.04);
 }
-.sp-band-head {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-bottom: 4px;
-}
 .sp-band-dot {
   width: 6px;
   height: 6px;
@@ -658,41 +658,40 @@ body {
   flex-shrink: 0;
 }
 .sp-band-name {
-  font-size: 11px;
-  font-weight: 600;
-}
-.sp-band-hz {
   font-size: 9px;
-  color: var(--text-dim);
-  margin-left: auto;
-  font-family: monospace;
+  font-weight: 600;
+  white-space: nowrap;
 }
 .sp-band-track {
-  height: 6px;
+  flex: 1;
+  height: 4px;
   background: rgba(255, 255, 255, 0.06);
-  border-radius: 3px;
+  border-radius: 2px;
   overflow: hidden;
-  margin-bottom: 2px;
+  min-width: 24px;
 }
 .sp-band-fill {
   height: 100%;
-  border-radius: 3px;
+  border-radius: 2px;
   transition: width 0.2s ease;
 }
 .sp-band-val {
   font-size: 9px;
   font-family: monospace;
   color: var(--text-dim);
+  min-width: 36px;
+  text-align: right;
 }
-
-.spectral-footer {
-  display: flex;
-  justify-content: space-between;
-  padding: 4px 12px 6px;
-  font-size: 10px;
+.sp-dominant {
+  font-size: 11px;
   font-family: monospace;
   color: var(--text-dim);
-  border-top: 1px solid var(--border);
+  margin-left: auto;
+  white-space: nowrap;
+}
+.sp-dominant small {
+  font-size: 9px;
+  opacity: 0.7;
 }
 
 /* --- XR / VR View --- */
@@ -1260,14 +1259,15 @@ body {
 }
 .topomap-canvas-wrap {
   position: relative;
-  height: 240px;
+  flex: 1;
+  min-height: 120px;
   background: var(--bg);
 }
 .topomap-bands {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 12px;
-  padding: 6px 12px;
+  gap: 4px 10px;
+  padding: 4px 12px;
   border-top: 1px solid var(--border);
 }
 .topo-band {
@@ -1310,12 +1310,10 @@ body {
   min-width: 40px;
   text-align: right;
 }
-.topomap-footer {
-  display: flex;
-  justify-content: space-between;
-  padding: 4px 12px 6px;
-  font-size: 10px;
+.topo-dominant {
+  font-size: 11px;
   font-family: monospace;
   color: var(--text-dim);
-  border-top: 1px solid var(--border);
+  margin-left: auto;
+  white-space: nowrap;
 }

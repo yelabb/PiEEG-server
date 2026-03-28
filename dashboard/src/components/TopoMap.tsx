@@ -529,6 +529,9 @@ const TopoMap = memo(function TopoMap({ eegData }: TopoMapProps) {
             </button>
           ))}
         </div>
+        <span className="topo-dominant">
+          <strong style={{ color: dominantColor }}>{dominant.band || "—"}</strong>
+        </span>
         <button
           className={`btn topo-pause${paused ? " active" : ""}`}
           onClick={() => setPaused((v) => !v)}
@@ -569,14 +572,6 @@ const TopoMap = memo(function TopoMap({ eegData }: TopoMapProps) {
             </div>
           );
         })}
-      </div>
-
-      <div className="topomap-footer">
-        <span>
-          Dominant:{" "}
-          <strong style={{ color: dominantColor }}>{dominant.band || "—"}</strong>
-        </span>
-        <span>{NUM_CHANNELS} ch · {GRID_RES}×{GRID_RES} IDW</span>
       </div>
     </div>
   );
