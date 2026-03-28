@@ -14,7 +14,8 @@ pip install pieeg-server
 ```
 
 <p align="left">
-    <img width="1245" height="930" alt="image" src="https://github.com/user-attachments/assets/0db75f93-03c8-4876-a168-330eb626a494" />
+<img width="1409" height="859" alt="image" src="https://github.com/user-attachments/assets/65a2ab63-256b-4757-b6e3-c13716c92e35" />
+
   <img width="20%" alt="Dashboard overview" src="https://github.com/user-attachments/assets/6e88f47c-f17e-47f8-a088-771f1a064d43" />
   <img width="20%" alt="Spectral analysis" src="https://github.com/user-attachments/assets/e9255668-05dd-4738-80b5-7c2a18411f65" />
   <img width="20%" alt="Channel detail" src="https://github.com/user-attachments/assets/1dca8e35-d645-46a5-b957-245b65f5dd82" />
