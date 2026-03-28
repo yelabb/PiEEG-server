@@ -7,7 +7,13 @@ const SAMPLE_RATE = 250;
 
 let fftEngine: FftEngine | null = null;
 
-const ctx = self as unknown as DedicatedWorkerGlobalScope;
+// Worker global — DOM lib doesn't expose DedicatedWorkerGlobalScope but
+// `self` is typed as `Window & typeof globalThis` which is close enough.
+// We use `onmessage` / `postMessage` directly.
+const ctx = self as unknown as {
+  onmessage: ((ev: MessageEvent<WorkerInMessage>) => void) | null;
+  postMessage(msg: WorkerOutMessage): void;
+};
 
 ctx.onmessage = (event: MessageEvent<WorkerInMessage>) => {
   const { type } = event.data;
