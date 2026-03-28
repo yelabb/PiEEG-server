@@ -62,6 +62,11 @@ export function useEEG(timeWindowSec = 4) {
 
   const setPaused = useCallback((v) => {
     pausedRef.current = v;
+    // On resume, clear stale buffer so display starts fresh from live data
+    if (!v) {
+      writeIndexRef.current = 0;
+      samplesInBufRef.current = 0;
+    }
   }, []);
 
   const sendCommand = useCallback((cmd) => {
@@ -185,6 +190,7 @@ export function useEEG(timeWindowSec = 4) {
       writeIndex: writeIndexRef,
       samplesInBuffer: samplesInBufRef,
       bufferSize,
+      gridSuspended: false, // set by App when expanded overlay is open
     };
     return d;
   }, []); // eslint-disable-line react-hooks/exhaustive-deps

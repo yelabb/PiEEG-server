@@ -148,6 +148,12 @@ const ChannelCanvas = memo(function ChannelCanvas({ chIdx, eegData, yRange, expa
         return;
       }
 
+      // Suspend grid draws while expanded overlay covers them
+      if (!expanded && eegData.gridSuspended) {
+        rafRef.current = requestAnimationFrame(tick);
+        return;
+      }
+
       // Grid channels: draw every Nth frame (30fps), staggered across channels
       if (!expanded && (tickCountRef.current % GRID_FRAME_INTERVAL) !== staggerOffset) {
         rafRef.current = requestAnimationFrame(tick);

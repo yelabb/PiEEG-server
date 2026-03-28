@@ -172,6 +172,9 @@ export default function App() {
     );
   }
 
+  // Suspend grid RAF loops while expanded overlay covers them
+  eeg.data.gridSuspended = expandedCh !== null && activeChannels.has(expandedCh);
+
   return (
     <AuthGate>
       {/* Header */}
@@ -188,6 +191,9 @@ export default function App() {
               className={`status-dot${eeg.connected ? " connected" : ""}`}
             />
             {eeg.connected ? " Connected" : " Disconnected"}
+          </span>
+          <span className={`live-badge${paused ? " paused" : ""}`}>
+            {paused ? "⏸ PAUSED" : "● LIVE"}
           </span>
           <span>{eeg.hz ? `${eeg.hz} Hz` : "— Hz"}</span>
           <span>{eeg.sampleCount.toLocaleString()} samples</span>

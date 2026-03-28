@@ -78,6 +78,24 @@ body {
   0%, 100% { box-shadow: 0 0 6px var(--green), 0 0 12px rgba(63, 185, 80, 0.3); }
   50% { box-shadow: 0 0 8px var(--green), 0 0 20px rgba(63, 185, 80, 0.5); }
 }
+.live-badge {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(63, 185, 80, 0.15);
+  color: var(--green);
+}
+.live-badge.paused {
+  background: rgba(210, 153, 34, 0.15);
+  color: var(--yellow);
+  animation: paused-blink 1.5s ease-in-out infinite;
+}
+@keyframes paused-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
 
 /* --- Controls --- */
 .controls {
