@@ -8,6 +8,7 @@ import PerformanceMonitor from "./components/PerformanceMonitor";
 import SessionList from "./components/SessionList";
 import SessionViewer from "./components/SessionViewer";
 import XRWaveView from "./components/XRWaveView";
+import TopoMap from "./components/TopoMap";
 import UpdateBanner from "./components/UpdateBanner";
 import { NUM_CHANNELS } from "./types";
 import type { SelectOption } from "./types";
@@ -347,7 +348,12 @@ export default function App() {
             />
           ))}
         </div>
-        {showFFT && <SpectralPanel eegData={eeg.data} />}
+        {showFFT && (
+          <div className="fft-area">
+            <SpectralPanel eegData={eeg.data} />
+            <TopoMap eegData={eeg.data} />
+          </div>
+        )}
       </div>
 
       {/* Recording result modal */}
