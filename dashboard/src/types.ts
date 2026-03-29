@@ -107,6 +107,7 @@ export interface UseEEGReturn {
   connected: boolean;
   sampleCount: number;
   hz: number;
+  latencyMs: number | null;
   recording: boolean;
   recordElapsed: number;
   recordResult: RecordResult | null;

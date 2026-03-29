@@ -11,10 +11,16 @@ import { NUM_CHANNELS, SAMPLE_RATE } from "../types";
 
 const UI_UPDATE_MS = 500; // Throttle React state updates
 
+// Exponential backoff config
+const BACKOFF_INITIAL_MS = 1000;
+const BACKOFF_MAX_MS = 30000;
+const BACKOFF_MULTIPLIER = 2;
+
 export function useEEG(timeWindowSec = 4): UseEEGReturn {
   const [connected, setConnected] = useState(false);
   const [sampleCount, setSampleCount] = useState(0);
   const [hz, setHz] = useState(0);
+  const [latencyMs, setLatencyMs] = useState<number | null>(null);
   const [recording, setRecording] = useState(false);
   const [recordElapsed, setRecordElapsed] = useState(0);
   const [recordResult, setRecordResult] = useState<RecordResult | null>(null);
@@ -96,16 +102,25 @@ export function useEEG(timeWindowSec = 4): UseEEGReturn {
       }
     }
 
+    let backoffMs = BACKOFF_INITIAL_MS;
+
     async function connect() {
       const token = await fetchWsToken();
       const url = token ? `${wsBase}?token=${encodeURIComponent(token)}` : wsBase;
       const ws = new WebSocket(url);
       wsRef.current = ws;
 
-      ws.onopen = () => setConnected(true);
+      ws.onopen = () => {
+        setConnected(true);
+        backoffMs = BACKOFF_INITIAL_MS; // Reset on successful connect
+      };
       ws.onclose = () => {
         setConnected(false);
-        setTimeout(connect, 2000);
+        setLatencyMs(null);
+        // Exponential backoff with jitter
+        const jitter = Math.random() * backoffMs * 0.3;
+        setTimeout(connect, backoffMs + jitter);
+        backoffMs = Math.min(backoffMs * BACKOFF_MULTIPLIER, BACKOFF_MAX_MS);
       };
       ws.onerror = () => ws.close();
 
@@ -167,6 +182,10 @@ export function useEEG(timeWindowSec = 4): UseEEGReturn {
             const elapsed = ts[ts.length - 1] - ts[0];
             if (elapsed > 0) setHz(Math.round((ts.length - 1) / elapsed));
           }
+
+          // One-way latency estimate (client clock - server timestamp)
+          const latency = Math.round((Date.now() / 1000 - now) * 1000);
+          if (latency >= 0 && latency < 10000) setLatencyMs(latency);
         }
       };
     }
@@ -198,6 +217,7 @@ export function useEEG(timeWindowSec = 4): UseEEGReturn {
     connected,
     sampleCount,
     hz,
+    latencyMs,
     recording,
     recordElapsed,
     recordResult,

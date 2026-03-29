@@ -1311,3 +1311,123 @@ body {
   margin-left: auto;
   white-space: nowrap;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Latency Badge
+   ═══════════════════════════════════════════════════════════════════════ */
+.latency-badge {
+  font-size: 11px;
+  font-family: monospace;
+  padding: 1px 7px;
+  border-radius: 4px;
+  background: rgba(63, 185, 80, 0.12);
+  color: var(--green);
+}
+.latency-badge.warn {
+  background: rgba(210, 153, 34, 0.15);
+  color: var(--yellow);
+}
+.latency-badge.critical {
+  background: rgba(248, 81, 73, 0.15);
+  color: var(--red);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Signal Quality Badge
+   ═══════════════════════════════════════════════════════════════════════ */
+.signal-quality {
+  display: inline-block;
+  font-size: 8px;
+  font-weight: 700;
+  font-family: monospace;
+  margin-left: 6px;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--green);
+  letter-spacing: 0.5px;
+  vertical-align: middle;
+  transition: color 0.3s;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Keyboard Shortcut Help Modal
+   ═══════════════════════════════════════════════════════════════════════ */
+.shortcut-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 28px 32px;
+  box-shadow: 0 0 40px rgba(88, 166, 255, 0.08), 0 8px 24px rgba(0, 0, 0, 0.5);
+  max-width: 380px;
+  width: 90%;
+  animation: scale-in 0.15s ease-out;
+}
+.shortcut-card h2 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 20px;
+  color: var(--accent);
+}
+.shortcut-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 13px;
+}
+.shortcut-row kbd {
+  display: inline-block;
+  min-width: 44px;
+  text-align: center;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-family: monospace;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.shortcut-row span {
+  color: var(--text-dim);
+}
+.shortcut-close {
+  width: 100%;
+  text-align: center;
+  padding: 6px 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Error Boundary
+   ═══════════════════════════════════════════════════════════════════════ */
+.error-boundary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-height: 200px;
+  background: var(--bg);
+}
+.error-card {
+  text-align: center;
+  padding: 40px;
+  max-width: 480px;
+}
+.error-card h2 {
+  font-size: 18px;
+  color: var(--red);
+  margin-bottom: 12px;
+}
+.error-msg {
+  font-size: 13px;
+  font-family: monospace;
+  color: var(--text-dim);
+  margin-bottom: 20px;
+  word-break: break-word;
+}

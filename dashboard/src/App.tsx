@@ -10,6 +10,8 @@ import SessionViewer from "./components/SessionViewer";
 import XRWaveView from "./components/XRWaveView";
 import TopoMap from "./components/TopoMap";
 import UpdateBanner from "./components/UpdateBanner";
+import ShortcutHelp from "./components/ShortcutHelp";
+import ErrorBoundary from "./components/ErrorBoundary";
 import { NUM_CHANNELS } from "./types";
 import type { SelectOption } from "./types";
 
@@ -157,10 +159,12 @@ export default function App() {
   if (view === "playback" && selectedSession) {
     return (
       <AuthGate>
-        <SessionViewer
-          filename={selectedSession}
-          onBack={() => { setView("sessions"); setSelectedSession(null); }}
-        />
+        <ErrorBoundary>
+          <SessionViewer
+            filename={selectedSession}
+            onBack={() => { setView("sessions"); setSelectedSession(null); }}
+          />
+        </ErrorBoundary>
       </AuthGate>
     );
   }
@@ -168,10 +172,12 @@ export default function App() {
   if (view === "sessions") {
     return (
       <AuthGate>
-        <SessionList
-          onSelect={(filename) => { setSelectedSession(filename); setView("playback"); }}
-          onBack={() => setView("live")}
-        />
+        <ErrorBoundary>
+          <SessionList
+            onSelect={(filename) => { setSelectedSession(filename); setView("playback"); }}
+            onBack={() => setView("live")}
+          />
+        </ErrorBoundary>
       </AuthGate>
     );
   }
@@ -197,6 +203,11 @@ export default function App() {
             />
             {eeg.connected ? " Connected" : " Disconnected"}
           </span>
+          {eeg.latencyMs !== null && (
+            <span className={`latency-badge${eeg.latencyMs > 100 ? " warn" : ""}${eeg.latencyMs > 500 ? " critical" : ""}`}>
+              {eeg.latencyMs} ms
+            </span>
+          )}
           <span className={`live-badge${paused ? " paused" : ""}`}>
             {paused ? "⏸ PAUSED" : "● LIVE"}
           </span>
@@ -327,7 +338,8 @@ export default function App() {
       </div>
 
       {/* Main area */}
-      <div className={`main-area${showFFT ? " with-fft" : ""}`}>
+      <ErrorBoundary>
+        <div className={`main-area${showFFT ? " with-fft" : ""}`}>
         {expandedCh !== null && activeChannels.has(expandedCh) && (
           <ChannelDetailPanel
             chIdx={expandedCh}
@@ -354,7 +366,8 @@ export default function App() {
             <TopoMap eegData={eeg.data} />
           </div>
         )}
-      </div>
+        </div>
+      </ErrorBoundary>
 
       {/* Recording result modal */}
       {eeg.recordResult && (
@@ -416,6 +429,9 @@ export default function App() {
 
       {/* Performance Monitor (press P to toggle) */}
       <PerformanceMonitor />
+
+      {/* Keyboard shortcut help (press ? to toggle) */}
+      <ShortcutHelp />
 
       {/* Footer */}
       <footer className="footer">

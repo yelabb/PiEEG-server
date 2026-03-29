@@ -109,6 +109,7 @@ const ChannelCanvas = memo(function ChannelCanvas({ chIdx, eegData, yRange, expa
   const rafRef = useRef(0);
   const rmsRef = useRef(0);
   const labelRef = useRef<HTMLDivElement>(null);
+  const qualityRef2 = useRef<HTMLSpanElement>(null);
   const sizeRef = useRef<CanvasSize>({ w: 0, h: 0, pw: 0, ph: 0, dpr: 1 });
   const needsResizeRef = useRef(true);
   const qualityRef = useRef<Quality>("high");
@@ -198,10 +199,17 @@ const ChannelCanvas = memo(function ChannelCanvas({ chIdx, eegData, yRange, expa
       rmsFrameRef.current++;
       if (rms !== undefined && (rmsFrameRef.current & 1) === 0) {
         rmsRef.current = rms;
+        const ratio = rms / yRange;
         if (labelRef.current) {
-          const ratio = rms / yRange;
           labelRef.current.style.borderLeftColor =
             ratio > 0.8 ? "#f85149" : ratio > 0.4 ? "#d29922" : "#3fb950";
+        }
+        if (qualityRef2.current) {
+          const color = ratio > 0.8 ? "#f85149" : ratio > 0.4 ? "#d29922" : "#3fb950";
+          const label = ratio > 0.8 ? "HIGH" : ratio > 0.4 ? "MED" : "OK";
+          const isFlatline = rms < 0.5;
+          qualityRef2.current.style.color = isFlatline ? "#8b949e" : color;
+          qualityRef2.current.textContent = isFlatline ? "FLAT" : label;
         }
       }
 
@@ -237,7 +245,10 @@ const ChannelCanvas = memo(function ChannelCanvas({ chIdx, eegData, yRange, expa
 
   return (
     <div className={`channel-cell${expanded ? " expanded" : ""}`} onClick={onToggleExpand}>
-      <div className="channel-label" ref={labelRef}>Ch {chIdx + 1}</div>
+      <div className="channel-label" ref={labelRef}>
+        Ch {chIdx + 1}
+        <span className="signal-quality" ref={qualityRef2}>OK</span>
+      </div>
       <canvas
         ref={canvasRef}
         style={{ display: "block", width: "100%", height: "100%" }}
