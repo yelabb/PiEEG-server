@@ -14,13 +14,15 @@ pip install pieeg-server
 ```
 
 <p align="left">
-<img width="1409" height="859" alt="image" src="https://github.com/user-attachments/assets/65a2ab63-256b-4757-b6e3-c13716c92e35" />
 
-  <img width="20%" alt="Dashboard overview" src="https://github.com/user-attachments/assets/6e88f47c-f17e-47f8-a088-771f1a064d43" />
-  <img width="20%" alt="Spectral analysis" src="https://github.com/user-attachments/assets/e9255668-05dd-4738-80b5-7c2a18411f65" />
-  <img width="20%" alt="Channel detail" src="https://github.com/user-attachments/assets/1dca8e35-d645-46a5-b957-245b65f5dd82" />
-  <img width="20%" alt="image" src="https://github.com/user-attachments/assets/a837586b-8df1-4e86-9ff9-c72e94830953" />
-      <img height="65" alt="image" src="https://github.com/user-attachments/assets/7d58af68-85c4-41d3-b1ab-89b23e99faff" />
+<img width="100%" alt="image" src="https://github.com/user-attachments/assets/65a2ab63-256b-4757-b6e3-c13716c92e35" />
+
+  <img width="15%" alt="image" src="https://github.com/user-attachments/assets/395f1c53-88ff-4728-8cd9-b06b80bc82de" />
+  <img width="15%" alt="Dashboard overview" src="https://github.com/user-attachments/assets/6e88f47c-f17e-47f8-a088-771f1a064d43" />
+  <img width="15%" alt="Spectral analysis" src="https://github.com/user-attachments/assets/e9255668-05dd-4738-80b5-7c2a18411f65" />
+  <img width="15%" alt="Channel detail" src="https://github.com/user-attachments/assets/1dca8e35-d645-46a5-b957-245b65f5dd82" />
+  <img width="15%" alt="image" src="https://github.com/user-attachments/assets/a837586b-8df1-4e86-9ff9-c72e94830953" />
+
 
 
 </p>
