@@ -207,17 +207,15 @@ export default function App() {
       {/* Header */}
       <header className="header">
         <h1>
-          Pi<span>EEG</span>-16{" "}
-          <small style={{ fontWeight: 400, color: "var(--text-dim)" }}>
-            Dashboard
-          </small>
+          Pi<span>EEG</span>-16
+          <small>Dashboard</small>
         </h1>
         <div className="status-bar">
           <span>
             <span
               className={`status-dot${eeg.connected ? " connected" : ""}`}
             />
-            {eeg.connected ? " Connected" : " Disconnected"}
+            {eeg.connected ? "Connected" : "Disconnected"}
           </span>
           {eeg.latencyMs !== null && (
             <span className={`latency-badge${eeg.latencyMs > 100 ? " warn" : ""}${eeg.latencyMs > 500 ? " critical" : ""}`}>
@@ -225,10 +223,10 @@ export default function App() {
             </span>
           )}
           <span className={`live-badge${paused ? " paused" : ""}`}>
-            {paused ? "⏸ PAUSED" : "● LIVE"}
+            {paused ? "PAUSED" : "LIVE"}
           </span>
-          <span>{eeg.hz ? `${eeg.hz} Hz` : "— Hz"}</span>
-          <span>{eeg.sampleCount.toLocaleString()} samples</span>
+          <span style={{ fontFamily: "var(--mono)" }}>{eeg.hz ? `${eeg.hz} Hz` : "— Hz"}</span>
+          <span style={{ fontFamily: "var(--mono)" }}>{eeg.sampleCount.toLocaleString()} samples</span>
         </div>
       </header>
 
@@ -238,7 +236,7 @@ export default function App() {
           className={`btn${paused ? " active" : ""}`}
           onClick={togglePause}
         >
-          {paused ? "▶ Resume" : "⏸ Pause"}
+          {paused ? "Resume" : "Pause"}
         </button>
         <button
           className={`btn btn-record${eeg.recording ? " recording" : ""}`}
@@ -246,8 +244,8 @@ export default function App() {
         >
           <span className="rec-dot" />
           {eeg.recording
-            ? `⏹ Stop ${formatElapsed(eeg.recordElapsed)}`
-            : "⏺ Record"}
+            ? `Stop ${formatElapsed(eeg.recordElapsed)}`
+            : "Record"}
         </button>
         <button
           className={`btn${filterEnabled ? " active" : ""}`}
@@ -283,14 +281,14 @@ export default function App() {
           className={`btn btn-chat${showChat ? " active" : ""}`}
           onClick={() => setShowChat((v) => !v)}
         >
-          🧠 Chat
+          Chat
         </button>
         <button
           className="btn btn-xr"
           onClick={() => setXrActive(true)}
           title="Open EEG waves in immersive 3D / VR"
         >
-          🥽 XR View
+          XR View
         </button>
         <div className="sep" />
         <div className="control-group">
@@ -485,19 +483,19 @@ export default function App() {
 
       {/* Footer */}
       <footer className="footer">
-        <span>PiEEG-16-server · React Dashboard</span>
+        <span style={{ fontFamily: "var(--mono)", letterSpacing: "-0.01em" }}>PiEEG-16</span>
         <span className="kbd-hints">
-          <kbd>Space</kbd> Pause&ensp;
-          <kbd>R</kbd> Record&ensp;
-          <kbd>F</kbd> FFT&ensp;
-          <kbd>G</kbd> Gram&ensp;
-          <kbd>S</kbd> Stats&ensp;
-          <kbd>V</kbd> XR&ensp;
-          <kbd>C</kbd> Chat&ensp;
-          <kbd>Esc</kbd> Close&ensp;
+          <kbd>Space</kbd> Pause
+          <kbd>R</kbd> Record
+          <kbd>F</kbd> FFT
+          <kbd>G</kbd> Gram
+          <kbd>S</kbd> Stats
+          <kbd>V</kbd> XR
+          <kbd>C</kbd> Chat
+          <kbd>Esc</kbd> Close
           <kbd>P</kbd> Perf
         </span>
-        <span>Battery powered only · Not a medical device</span>
+        <span>Not a medical device</span>
       </footer>
     </AuthGate>
   );
