@@ -61,10 +61,16 @@ const Spectrogram = memo(function Spectrogram({ eegData }: SpectrogramProps) {
   const needsResizeRef = useRef(true);
   const avgBufRef = useRef(new Float64Array(FFT_SIZE));
 
-  // Spectrogram history: each column is a Float64Array of PSD values
+  // Circular-buffer spectrogram history
   const historyRef = useRef<Float64Array[]>([]);
+  const historyHeadRef = useRef(0);   // next write position
+  const historyCountRef = useRef(0);  // how many filled
   const maxColumnsRef = useRef(400);
   const dBFloorRef = useRef(-60);
+  const globalPeakRef = useRef(1e-30); // incremental peak tracking
+
+  // Cached colour-bar ImageData so we don't redraw it every frame
+  const colourBarCacheRef = useRef<{ img: ImageData; h: number } | null>(null);
 
   const [channel, setChannel] = useState(-1);
   const [paused, setPaused] = useState(false);
@@ -89,9 +95,23 @@ const Spectrogram = memo(function Spectrogram({ eegData }: SpectrogramProps) {
       const { width: w, height: h } = entry.contentRect;
       canvasSizeRef.current = { w, h, pw: Math.round(w * dpr), ph: Math.round(h * dpr), dpr };
       needsResizeRef.current = true;
-      maxColumnsRef.current = Math.max(200, Math.round(w));
+      const newMax = Math.max(200, Math.round(w));
+      if (newMax !== maxColumnsRef.current) {
+        // Reset history on resize since column count changes
+        maxColumnsRef.current = newMax;
+        historyRef.current = [];
+        historyHeadRef.current = 0;
+        historyCountRef.current = 0;
+        globalPeakRef.current = 1e-30;
+      }
+      colourBarCacheRef.current = null; // invalidate colour bar
     });
     observer.observe(canvas);
+
+    // Reusable ImageData for the heatmap (allocated once, resized only on change)
+    let heatImgData: ImageData | null = null;
+    let heatW = 0;
+    let heatH = 0;
 
     const tick = () => {
       const { w, h, pw, ph } = canvasSizeRef.current;
@@ -105,6 +125,7 @@ const Spectrogram = memo(function Spectrogram({ eegData }: SpectrogramProps) {
         needsResizeRef.current = false;
         canvas.width = pw;
         canvas.height = ph;
+        heatImgData = null; // force re-alloc
       }
 
       ctx.setTransform(dprRef.current, 0, 0, dprRef.current, 0, 0);
@@ -134,19 +155,36 @@ const Spectrogram = memo(function Spectrogram({ eegData }: SpectrogramProps) {
           }
 
           if (result) {
-            // Store only the bins we display
-            const col = new Float64Array(binsToDisplay);
+            const maxCols = maxColumnsRef.current;
+            const history = historyRef.current;
+            const head = historyHeadRef.current;
+
+            // Reuse or allocate column
+            let col: Float64Array;
+            if (history.length < maxCols) {
+              col = new Float64Array(binsToDisplay);
+              history.push(col);
+              historyCountRef.current = history.length;
+            } else {
+              col = history[head];
+            }
             for (let k = 0; k < binsToDisplay; k++) col[k] = result.psd[k];
-            historyRef.current.push(col);
-            if (historyRef.current.length > maxColumnsRef.current) {
-              historyRef.current.shift();
+            historyHeadRef.current = (head + 1) % maxCols;
+
+            // Track peak incrementally from this new column
+            for (let k = 1; k < binsToDisplay; k++) {
+              if (col[k] > globalPeakRef.current) globalPeakRef.current = col[k];
             }
           }
         }
       }
 
       // Draw spectrogram
-      drawSpectrogram(ctx, w, h);
+      drawSpectrogram(ctx, w, h, heatImgData, heatW, heatH, (img, iw, ih) => {
+        heatImgData = img;
+        heatW = iw;
+        heatH = ih;
+      });
       rafRef.current = requestAnimationFrame(tick);
     };
 
@@ -157,12 +195,20 @@ const Spectrogram = memo(function Spectrogram({ eegData }: SpectrogramProps) {
     };
   }, [eegData, channel, paused, fft, binsToDisplay]);
 
-  function drawSpectrogram(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  function drawSpectrogram(
+    ctx: CanvasRenderingContext2D,
+    w: number,
+    h: number,
+    heatImgData: ImageData | null,
+    prevHeatW: number,
+    prevHeatH: number,
+    setHeatImg: (img: ImageData, w: number, h: number) => void,
+  ) {
     ctx.fillStyle = "#0d1117";
     ctx.fillRect(0, 0, w, h);
 
-    const history = historyRef.current;
-    if (history.length < 2) {
+    const histCount = historyCountRef.current;
+    if (histCount < 2) {
       ctx.fillStyle = "#4b5563";
       ctx.font = "13px monospace";
       ctx.textAlign = "center";
@@ -177,47 +223,73 @@ const Spectrogram = memo(function Spectrogram({ eegData }: SpectrogramProps) {
     const plotW = w - padL - padR;
     const plotH = h - padT - padB;
     const dBFloor = dBFloorRef.current;
+    const globalPeak = globalPeakRef.current;
 
-    // Compute global peak for normalization
-    let globalPeak = 1e-30;
-    for (let c = 0; c < history.length; c++) {
-      const col = history[c];
-      for (let k = 1; k < col.length; k++) {
-        if (col[k] > globalPeak) globalPeak = col[k];
-      }
-    }
-
-    const numCols = history.length;
+    const history = historyRef.current;
+    const head = historyHeadRef.current;
+    const numCols = histCount;
     const numRows = binsToDisplay - 1; // skip DC bin
-    const colW = plotW / numCols;
-    const rowH = plotH / numRows;
 
-    // Draw heatmap using fillRect for each cell
+    // ── Draw heatmap via ImageData (single putImageData, no fillRect) ──
+    const imgW = numCols;
+    const imgH = numRows;
+
+    // Allocate ImageData only when dimensions change
+    let imgData = heatImgData;
+    if (!imgData || prevHeatW !== imgW || prevHeatH !== imgH) {
+      imgData = ctx.createImageData(imgW, imgH);
+    }
+    const pixels = imgData.data;
+    const invNegFloor = 1 / -dBFloor;
+    const log10 = Math.log10;
+
     for (let c = 0; c < numCols; c++) {
-      const col = history[c];
-      const x = padL + c * colW;
+      // Read columns in chronological order from the circular buffer
+      const colIdx = histCount < maxColumnsRef.current
+        ? c
+        : (head + c) % histCount;
+      const col = history[colIdx];
       for (let k = 0; k < numRows; k++) {
         const psdVal = col[k + 1]; // skip DC
-        const dB = 10 * Math.log10((psdVal || 1e-30) / globalPeak);
-        const norm = Math.max(0, Math.min(1, (dB - dBFloor) / -dBFloor));
-        const lutIdx = Math.round(norm * 255) * 4;
+        const dB = 10 * log10((psdVal || 1e-30) / globalPeak);
+        let norm = (dB - dBFloor) * invNegFloor;
+        if (norm < 0) norm = 0;
+        else if (norm > 1) norm = 1;
+        const lutOff = (norm * 255 + 0.5) | 0;
+        const lutIdx = lutOff * 4;
 
-        const r = TURBO_LUT[lutIdx];
-        const g = TURBO_LUT[lutIdx + 1];
-        const b2 = TURBO_LUT[lutIdx + 2];
-
-        // Y: low frequencies at bottom, high at top
-        const y = padT + (numRows - 1 - k) * rowH;
-        ctx.fillStyle = `rgb(${r},${g},${b2})`;
-        ctx.fillRect(x, y, Math.ceil(colW) + 1, Math.ceil(rowH) + 1);
+        // Y: low frequencies at bottom → pixel row 0 = highest freq
+        const row = numRows - 1 - k;
+        const pxOff = (row * imgW + c) * 4;
+        pixels[pxOff] = TURBO_LUT[lutIdx];
+        pixels[pxOff + 1] = TURBO_LUT[lutIdx + 1];
+        pixels[pxOff + 2] = TURBO_LUT[lutIdx + 2];
+        pixels[pxOff + 3] = 255;
       }
     }
+
+    // Scale ImageData into the plot area
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    // Put imgData at origin via temp canvas or putImageData + drawImage
+    ctx.putImageData(imgData, 0, 0);
+    ctx.drawImage(
+      ctx.canvas,
+      0, 0, imgW, imgH,             // src rect (in physical pixels)
+      padL, padT, plotW, plotH,      // dest rect (in CSS pixels, scaled by transform)
+    );
+    // Clear the temp pixels we wrote at origin
+    ctx.fillStyle = "#0d1117";
+    ctx.fillRect(0, 0, padL, padT + plotH);
+    ctx.restore();
+    setHeatImg(imgData, imgW, imgH);
 
     // Y-axis labels (frequency)
     const df = SAMPLE_RATE / FFT_SIZE;
     ctx.fillStyle = "#8b949e";
     ctx.font = "9px monospace";
     ctx.textAlign = "right";
+    const rowH = plotH / numRows;
     for (const f of [5, 10, 20, 30, 40, 50]) {
       if (f > MAX_DISPLAY_HZ) continue;
       const k = Math.round(f / df) - 1;
@@ -236,7 +308,7 @@ const Spectrogram = memo(function Spectrogram({ eegData }: SpectrogramProps) {
     ctx.restore();
 
     // X-axis: time (approximate)
-    const totalSec = (numCols * FFT_EVERY_FRAMES) / 60; // approximate seconds based on frame rate
+    const totalSec = (numCols * FFT_EVERY_FRAMES) / 60;
     ctx.textAlign = "center";
     ctx.fillStyle = "#8b949e";
     ctx.font = "9px monospace";
@@ -247,17 +319,29 @@ const Spectrogram = memo(function Spectrogram({ eegData }: SpectrogramProps) {
     }
     ctx.fillText("now", padL + plotW, h - 4);
 
-    // Color bar legend (right side)
+    // Color bar legend — cached as ImageData
     const barW = 8;
     const barX = w - padR + 2;
     const barT = padT;
-    const barH = plotH;
-    for (let i = 0; i < barH; i++) {
-      const norm = 1 - i / barH;
-      const lutIdx = Math.round(norm * 255) * 4;
-      ctx.fillStyle = `rgb(${TURBO_LUT[lutIdx]},${TURBO_LUT[lutIdx + 1]},${TURBO_LUT[lutIdx + 2]})`;
-      ctx.fillRect(barX, barT + i, barW, 1);
+    const barH = Math.round(plotH);
+    let barCache = colourBarCacheRef.current;
+    if (!barCache || barCache.h !== barH) {
+      const barImg = ctx.createImageData(barW, barH);
+      const bd = barImg.data;
+      for (let i = 0; i < barH; i++) {
+        const n2 = 1 - i / barH;
+        const li = ((n2 * 255 + 0.5) | 0) * 4;
+        const rr = TURBO_LUT[li], gg = TURBO_LUT[li + 1], bb = TURBO_LUT[li + 2];
+        for (let j = 0; j < barW; j++) {
+          const o = (i * barW + j) * 4;
+          bd[o] = rr; bd[o + 1] = gg; bd[o + 2] = bb; bd[o + 3] = 255;
+        }
+      }
+      barCache = { img: barImg, h: barH };
+      colourBarCacheRef.current = barCache;
     }
+    ctx.putImageData(barCache.img, Math.round(barX * dprRef.current), Math.round(barT * dprRef.current));
+
     ctx.fillStyle = "#8b949e";
     ctx.font = "8px monospace";
     ctx.textAlign = "left";
