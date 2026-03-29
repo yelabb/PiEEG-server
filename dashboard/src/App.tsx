@@ -14,6 +14,7 @@ import FilterPreview from "./components/FilterPreview";
 import StatsPanel from "./components/StatsPanel";
 import UpdateBanner from "./components/UpdateBanner";
 import ShortcutHelp from "./components/ShortcutHelp";
+import ChatPanel from "./components/ChatPanel";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { NUM_CHANNELS } from "./types";
 import type { SelectOption } from "./types";
@@ -51,6 +52,7 @@ export default function App() {
   const [xrActive, setXrActive] = useState(false);
   const [showSpectrogram, setShowSpectrogram] = useState(false);
   const [showStats, setShowStats] = useState(false);
+  const [showChat, setShowChat] = useState(false);
   const [activeChannels, setActiveChannels] = useState<Set<number>>(() =>
     window.innerWidth < 768 ? new Set(DEFAULT_MOBILE) : new Set(ALL_CHANNELS)
   );
@@ -151,6 +153,9 @@ export default function App() {
           break;
         case "KeyS":
           setShowStats((v) => !v);
+          break;
+        case "KeyC":
+          setShowChat((v) => !v);
           break;
         case "KeyG":
           setShowSpectrogram((v) => !v);
@@ -273,6 +278,12 @@ export default function App() {
           onClick={() => setView("sessions")}
         >
           Sessions
+        </button>
+        <button
+          className={`btn btn-chat${showChat ? " active" : ""}`}
+          onClick={() => setShowChat((v) => !v)}
+        >
+          🧠 Chat
         </button>
         <button
           className="btn btn-xr"
@@ -466,6 +477,9 @@ export default function App() {
       {/* Performance Monitor (press P to toggle) */}
       <PerformanceMonitor />
 
+      {/* Chat side panel */}
+      <ChatPanel eegData={eeg.data} open={showChat} onClose={() => setShowChat(false)} />
+
       {/* Keyboard shortcut help (press ? to toggle) */}
       <ShortcutHelp />
 
@@ -479,6 +493,7 @@ export default function App() {
           <kbd>G</kbd> Gram&ensp;
           <kbd>S</kbd> Stats&ensp;
           <kbd>V</kbd> XR&ensp;
+          <kbd>C</kbd> Chat&ensp;
           <kbd>Esc</kbd> Close&ensp;
           <kbd>P</kbd> Perf
         </span>
