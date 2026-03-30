@@ -13,7 +13,7 @@ import { NUM_CHANNELS, SAMPLE_RATE } from "../types";
 // ─────────────────────────────────────────────────────────────────────────────
 
 const FFT_SIZE = 256;
-const CHANNELS_PER_FRAME = 4; // stagger FFT: 4 ch per frame → 4 frames for all 16
+const CHANNELS_PER_FRAME = 4;
 const IDW_POWER = 2.5;
 const GRID_RES = 64;
 const SMOOTHING = 0.25;
@@ -53,6 +53,21 @@ const ELECTRODES_16: ElectrodePos[] = [
   { label: "Oz",  x:  0.00, y:  0.80 },
   { label: "O2",  x:  0.25, y:  0.85 },
 ];
+
+const ELECTRODES_8: ElectrodePos[] = [
+  { label: "Fp1", x: -0.30, y: -0.85 },
+  { label: "Fp2", x:  0.30, y: -0.85 },
+  { label: "C3",  x: -0.55, y:  0.00 },
+  { label: "C4",  x:  0.55, y:  0.00 },
+  { label: "T7",  x: -0.80, y:  0.00 },
+  { label: "T8",  x:  0.80, y:  0.00 },
+  { label: "O1",  x: -0.25, y:  0.85 },
+  { label: "O2",  x:  0.25, y:  0.85 },
+];
+
+function electrodesForChannels(n: number): ElectrodePos[] {
+  return n <= 8 ? ELECTRODES_8 : ELECTRODES_16;
+}
 
 // ── Precomputed gradient LUT (256 entries → zero allocs during render) ────
 const GRADIENT_STOPS = [
@@ -348,8 +363,9 @@ const TopoMap = memo(function TopoMap({ eegData }: TopoMapProps) {
   const dprRef = useRef(window.devicePixelRatio || 1);
   const needsResizeRef = useRef(true);
   const sizeRef = useRef({ w: 0, h: 0, pw: 0, ph: 0 });
-  const smoothedRef = useRef<number[]>(new Array(NUM_CHANNELS).fill(0));
-  const rawValuesRef = useRef<number[]>(new Array(NUM_CHANNELS).fill(0));
+  const smoothedRef = useRef<number[]>(new Array(eegData.numChannels).fill(0));
+  const rawValuesRef = useRef<number[]>(new Array(eegData.numChannels).fill(0));
+  const prevNumChRef = useRef(eegData.numChannels);
   const fftSlotRef = useRef(0); // which channel batch to FFT this frame
   const imgDataRef = useRef<ImageData | null>(null);
   const avgBPRef = useRef<BandPowers>({});
@@ -360,8 +376,18 @@ const TopoMap = memo(function TopoMap({ eegData }: TopoMapProps) {
   const [bandPowers, setBandPowers] = useState<BandPowers>({});
   const [dominant, setDominant] = useState({ band: "", freq: 0 });
 
+  const nCh = eegData.numChannels;
+  const electrodes = useMemo(() => electrodesForChannels(nCh), [nCh]);
   const fft = useMemo(() => new FftEngine(FFT_SIZE, SAMPLE_RATE), []);
-  const grid = useMemo(() => precomputeGrid(ELECTRODES_16, GRID_RES), []);
+  const grid = useMemo(() => precomputeGrid(electrodes, GRID_RES), [electrodes]);
+
+  // Reset smoothed/raw arrays when channel count changes
+  if (prevNumChRef.current !== nCh) {
+    prevNumChRef.current = nCh;
+    smoothedRef.current = new Array(nCh).fill(0);
+    rawValuesRef.current = new Array(nCh).fill(0);
+    avgBPRef.current = {};
+  }
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -474,7 +500,7 @@ const TopoMap = memo(function TopoMap({ eegData }: TopoMapProps) {
       const hasData = sm.some((v) => v !== 0);
       if (hasData) {
         const imgData = imgDataRef.current!;
-        renderHeatmapImage(imgData, IMG_RES, sm, grid, GRID_RES, eegData.numChannels);
+        renderHeatmapImage(imgData, IMG_RES, sm, grid, GRID_RES, electrodes.length);
 
         // Blit to offscreen canvas, then draw scaled to main canvas
         offCtx.putImageData(imgData, 0, 0);
@@ -493,7 +519,7 @@ const TopoMap = memo(function TopoMap({ eegData }: TopoMapProps) {
           cx - drawSize / 2, cy - drawSize / 2, drawSize, drawSize,
         );
 
-        drawOverlay(ctx, w, h, sm, ELECTRODES_16);
+        drawOverlay(ctx, w, h, sm, electrodes);
       } else {
         ctx.fillStyle = "#4b5563";
         ctx.font = "13px monospace";
@@ -510,7 +536,7 @@ const TopoMap = memo(function TopoMap({ eegData }: TopoMapProps) {
       cancelAnimationFrame(rafRef.current);
       observer.disconnect();
     };
-  }, [eegData, metric, paused, fft, grid]);
+  }, [eegData, metric, paused, fft, grid, electrodes]);
 
   const dominantColor =
     FREQUENCY_BANDS.find((b) => b.name === dominant.band)?.color || "#8b949e";
