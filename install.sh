@@ -3,7 +3,7 @@
 # PiEEG server: Remote installer
 #
 # Usage:
-#   curl -sSL https://raw.githubusercontent.com/yelabb/PiEEG-16-server/main/install.sh | bash
+#   curl -sSL https://raw.githubusercontent.com/yelabb/PiEEG-server/main/install.sh | bash
 #
 # This script:
 #   1. Checks that you're on a Raspberry Pi (or Linux)
@@ -27,8 +27,8 @@ else
     BOLD="" GREEN="" YELLOW="" RED="" CYAN="" RESET=""
 fi
 
-REPO_URL="https://github.com/yelabb/PiEEG-16-server.git"
-INSTALL_DIR="$HOME/PiEEG-16-server"
+REPO_URL="https://github.com/yelabb/PiEEG-server.git"
+INSTALL_DIR="$HOME/PiEEG-server"
 
 echo ""
 echo "${BOLD}${CYAN}╔══════════════════════════════════════════╗${RESET}"
@@ -43,7 +43,7 @@ if [[ "$(uname)" != "Linux" ]]; then
     echo ""
     echo "  For development on other platforms, clone manually:"
     echo "    git clone $REPO_URL"
-    echo "    cd PiEEG-16-server"
+    echo "    cd PiEEG-server"
     echo "    pip install -e ."
     echo "    pieeg-server --mock"
     exit 1
@@ -56,7 +56,7 @@ if grep -qi microsoft /proc/version 2>/dev/null; then
     echo ""
     echo "  For development/testing on Windows, clone manually:"
     echo "    git clone $REPO_URL"
-    echo "    cd PiEEG-16-server"
+    echo "    cd PiEEG-server"
     echo "    pip install -e ."
     echo "    pieeg-server --mock"
     exit 1

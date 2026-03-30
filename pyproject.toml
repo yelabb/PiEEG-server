@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pieeg-server"
 version = "0.14.0"
-description = "One-command local streaming server for PiEEG-16 (16-channel EEG shield for Raspberry Pi)"
+description = "One-command local streaming server for PiEEG (8/16-channel EEG shield for Raspberry Pi)"
 readme = "README.md"
 requires-python = ">=3.11"
 license = {file = "LICENSE"}
@@ -45,10 +45,10 @@ dev = [
 pieeg-server = "pieeg_server.__main__:main"
 
 [project.urls]
-Homepage = "https://github.com/yelabb/PiEEG-16-server"
+Homepage = "https://github.com/yelabb/PiEEG-server"
 Documentation = "https://pieeg.com/docs/docs/pieeg-16/"
-Repository = "https://github.com/yelabb/PiEEG-16-server"
-Issues = "https://github.com/yelabb/PiEEG-16-server/issues"
+Repository = "https://github.com/yelabb/PiEEG-server"
+Issues = "https://github.com/yelabb/PiEEG-server/issues"
 
 [tool.setuptools.packages.find]
 include = ["pieeg_server*"]
