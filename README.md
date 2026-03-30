@@ -27,6 +27,41 @@ pip install pieeg-server
 
 </p>
 
+## Features
+
+### Server
+
+- **250 Hz real-time streaming** — continuous EEG data over WebSocket (`ws://<host>:1616`), plain JSON, language-agnostic
+- **8 and 16 channel support** — auto-adapts to PiEEG-8 or PiEEG-16 shields (`--device pieeg8 | pieeg16`)
+- **Server-side bandpass filter** — Butterworth IIR (SOS), per-channel state, configurable cutoffs (`--filter --lowcut 1 --highcut 40`); adjustable live via WebSocket command
+- **CSV recording** — start/stop from the dashboard or CLI; auto-timestamped files with `~1 s` flush interval; optional duration limit
+- **Session annotations** — attach text notes to any frame; stored as sidecar `.annotations.json`; export annotated CSV
+- **Terminal monitor** — Rich-powered TUI with per-channel sparklines and µV readout; works over SSH with no browser (`--monitor`)
+- **Mock mode** — realistic synthetic EEG (alpha rhythm, drift, noise, blink artifacts) for development without hardware (`--mock`)
+- **Authentication** — optional 6-digit access code with rate limiting, HMAC timing-safe verification, HttpOnly session cookies, and single-use WebSocket tokens (`--auth`)
+- **Self-diagnostics** — `pieeg-server doctor` checks Pi model, Python version, SPI/GPIO devices, permissions, ports, deps, and systemd service in one shot
+- **Self-update** — detects git or pip install; checks PyPI / remote branch for new versions; one-click update from dashboard
+- **Systemd service** — auto-starts on boot via the install script; standard `systemctl` management
+- **Zero-dependency GPIO** — direct Linux chardev v1 ioctl (no `gpiod` package); stable ABI since Linux 4.8
+- **Spike rejection** — auto-resets after sustained electrode contact changes
+
+### Dashboard
+
+- **Real-time waveforms** — Canvas 2D rendering with adaptive quality (auto-downgrades on slow frames); configurable time window (2–16 s) and Y-scale (±50–500 µV)
+- **Signal quality indicators** — live per-channel RMS badge with color feedback (green / yellow / red / gray-flatline)
+- **Channel detail panel** — click any channel to expand: zoomed trace, FFT spectrum, band power bars, amplitude histogram, and full statistics overlay
+- **Spectral analysis (FFT)** — 256-point Cooley–Tukey FFT in a Web Worker; PSD plot (log dB or linear); band power bars for Delta / Theta / Alpha / Beta / Gamma; dominant-frequency detection
+- **Spectrogram** — scrolling time-frequency heatmap (Turbo colormap, –60 → 0 dB); circular buffer, incremental peak tracking
+- **Topographic map** — IDW-interpolated scalp heatmap over the 10-20 montage; selectable band metric; head outline with nose/ears
+- **Statistics panel** — 10 metrics per channel (Mean, RMS, Std, Variance, P-P, Min, Max, Skewness, Kurtosis, Zero-Crossings); sortable columns; CSV export
+- **Filter preview** — live Butterworth magnitude response curve with passband highlight and –3 dB reference as you adjust cutoffs
+- **3D immersive view** — Three.js arc of 16 wave strips with amplitude-responsive color, glow planes, starfield, and nebula particles; WebXR-ready
+- **AI chat assistant** — bring-your-own-provider side panel (OpenAI, Anthropic, Ollama, Groq, LM Studio, or any OpenAI-compatible endpoint); system prompt auto-includes live band powers and channel context; SSE streaming responses
+- **Session library** — browse, open, and replay saved recordings with play/pause, seek, and speed control (0.5×–2×); add/delete annotations during playback
+- **Performance monitor** — toggle overlay showing FPS, frame time, and JS heap usage
+- **Keyboard shortcuts** — Space (pause), R (record), F (FFT), G (spectrogram), S (stats), V (3D view), C (chat), P (perf monitor), ? (shortcut help)
+- **Update banner** — notifies when a newer version is available with platform-appropriate upgrade instructions
+- **Responsive auth gate** — 6-digit code entry screen when `--auth` is enabled; 24-hour session persistence
 
 ## Install
 
