@@ -2,8 +2,8 @@
 
 [![PyPI](https://img.shields.io/pypi/v/pieeg-server?color=blue)](https://pypi.org/project/pieeg-server/)
 [![Python](https://img.shields.io/pypi/pyversions/pieeg-server)](https://pypi.org/project/pieeg-server/)
-[![CI](https://github.com/yelabb/PiEEG-server/actions/workflows/ci.yml/badge.svg)](https://github.com/yelabb/PiEEG-server/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/github/license/yelabb/PiEEG-server)](LICENSE)
+[![CI](https://github.com/pieeg-club/PiEEG-server/actions/workflows/ci.yml/badge.svg)](https://github.com/pieeg-club/PiEEG-server/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/github/license/pieeg-club/PiEEG-server)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Raspberry%20Pi-c51a4a)](https://www.raspberrypi.com/)
 [![Downloads](https://img.shields.io/pypi/dm/pieeg-server)](https://pypi.org/project/pieeg-server/)
 
@@ -43,14 +43,14 @@ pip install pieeg-server
 SSH into your Pi and paste:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/yelabb/PiEEG-server/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/pieeg-club/PiEEG-server/main/install.sh | bash
 sudo reboot   # only needed first time, to enable SPI
 ```
 
 ### Option C — Clone & setup
 
 ```bash
-git clone https://github.com/yelabb/PiEEG-server.git
+git clone https://github.com/pieeg-club/PiEEG-server.git
 cd PiEEG-server
 chmod +x setup.sh
 ./setup.sh
@@ -422,7 +422,7 @@ The chardev v1 ioctl ABI has been stable since Linux 4.8 (2016) and is guarantee
 ### Setup
 
 ```bash
-git clone https://github.com/yelabb/PiEEG-server.git
+git clone https://github.com/pieeg-club/PiEEG-server.git
 cd PiEEG-server
 python -m venv .venv && source .venv/bin/activate  # or .venv\Scripts\Activate.ps1 on Windows
 pip install -e ".[dev]"

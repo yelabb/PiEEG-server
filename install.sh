@@ -3,7 +3,7 @@
 # PiEEG server: Remote installer
 #
 # Usage:
-#   curl -sSL https://raw.githubusercontent.com/yelabb/PiEEG-server/main/install.sh | bash
+#   curl -sSL https://raw.githubusercontent.com/pieeg-club/PiEEG-server/main/install.sh | bash
 #
 # This script:
 #   1. Checks that you're on a Raspberry Pi (or Linux)
@@ -27,7 +27,7 @@ else
     BOLD="" GREEN="" YELLOW="" RED="" CYAN="" RESET=""
 fi
 
-REPO_URL="https://github.com/yelabb/PiEEG-server.git"
+REPO_URL="https://github.com/pieeg-club/PiEEG-server.git"
 INSTALL_DIR="$HOME/PiEEG-server"
 
 echo ""

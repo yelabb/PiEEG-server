@@ -39,7 +39,7 @@ die() {
     fail "$1"
     echo ""
     echo "  Setup failed. You can re-run this script after fixing the issue above."
-    echo "  For help: https://github.com/yelabb/PiEEG-server/issues"
+    echo "  For help: https://github.com/pieeg-club/PiEEG-server/issues"
     exit 1
 }
 

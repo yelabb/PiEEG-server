@@ -45,10 +45,10 @@ dev = [
 pieeg-server = "pieeg_server.__main__:main"
 
 [project.urls]
-Homepage = "https://github.com/yelabb/PiEEG-server"
+Homepage = "https://github.com/pieeg-club/PiEEG-server"
 Documentation = "https://pieeg.com/docs/docs/pieeg-16/"
-Repository = "https://github.com/yelabb/PiEEG-server"
-Issues = "https://github.com/yelabb/PiEEG-server/issues"
+Repository = "https://github.com/pieeg-club/PiEEG-server"
+Issues = "https://github.com/pieeg-club/PiEEG-server/issues"
 
 [tool.setuptools.packages.find]
 include = ["pieeg_server*"]
