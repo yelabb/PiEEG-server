@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, memo, useMemo } from "react";
 import { FftEngine, FREQUENCY_BANDS } from "../lib/fftEngine";
 import type { EEGData, BandPowers } from "../types";
-import { NUM_CHANNELS, SAMPLE_RATE } from "../types";
+import { SAMPLE_RATE } from "../types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TopoMap — EEG scalp topographic heatmap
