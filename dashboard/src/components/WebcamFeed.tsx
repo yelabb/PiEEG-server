@@ -82,6 +82,7 @@ const WebcamFeed = memo(function WebcamFeed({ active, videoRef, videoData }: Web
   const streamRef = useRef<MediaStream | null>(null);
   const [minimized, setMinimized] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showInfo, setShowInfo] = useState(false);
 
   useEffect(() => {
     if (!active) {
@@ -132,13 +133,35 @@ const WebcamFeed = memo(function WebcamFeed({ active, videoRef, videoData }: Web
 
   return (
     <div className={`webcam-feed${minimized ? " minimized" : ""}`}>
-      <button
-        className="webcam-toggle"
-        onClick={() => setMinimized((v) => !v)}
-        title={minimized ? "Show webcam" : "Hide webcam"}
-      >
-        {minimized ? "📷" : "▾"}
-      </button>
+      <div className="webcam-toolbar">
+        <button
+          className="webcam-info-btn"
+          onClick={() => setShowInfo((v) => !v)}
+          title="What is this?"
+        >
+          ?
+        </button>
+        <button
+          className="webcam-toggle"
+          onClick={() => setMinimized((v) => !v)}
+          title={minimized ? "Show webcam" : "Hide webcam"}
+        >
+          {minimized ? "📷" : "▾"}
+        </button>
+      </div>
+      {showInfo && (
+        <div className="webcam-info-tooltip">
+          <p>
+            The optional webcam tracks <strong>blinks</strong>,{" "}
+            <strong>eye openness</strong>, <strong>jaw</strong> &amp;{" "}
+            <strong>head movement</strong> via MediaPipe.
+          </p>
+          <p>
+            All processing runs locally in your browser. Video frames never
+            leave your device.
+          </p>
+        </div>
+      )}
       {!minimized &&
         (error ? (
           <div className="webcam-error">📷 {error}</div>
