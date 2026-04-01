@@ -992,6 +992,30 @@ body {
   letter-spacing: 0.05em;
 }
 
+.xr-badge--vr {
+  background: linear-gradient(135deg, #10b981, #3b82f6);
+  font-size: 12px;
+  padding: 4px 12px;
+}
+
+.xr-enter-vr-btn {
+  background: linear-gradient(135deg, #7c3aed, #3b82f6);
+  border: none;
+  color: #fff;
+  font-weight: 700;
+  font-size: 16px;
+  padding: 12px 32px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  letter-spacing: 0.03em;
+  box-shadow: 0 4px 20px rgba(99, 102, 241, 0.4);
+}
+
+.xr-enter-vr-btn:hover {
+  opacity: 0.9;
+  box-shadow: 0 4px 28px rgba(99, 102, 241, 0.6);
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    Update Banner
    ═══════════════════════════════════════════════════════════════════════ */
