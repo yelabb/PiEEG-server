@@ -27,7 +27,7 @@ from .acquisition import AcquisitionLoop
 from .auth import AuthManager
 from .filters import MultichannelFilter
 from .recorder import Recorder
-from .webhooks import WebhookEngine
+from .webhooks import WebhookStore
 
 logger = logging.getLogger("pieeg.server")
 
@@ -54,8 +54,7 @@ class PiEEGServer:
         self._recorder_task: asyncio.Task | None = None
         self._record_start_time: float | None = None
         self._recordings_dir = Path("recordings")
-        self._webhooks: WebhookEngine | None = None
-        self._webhook_task: asyncio.Task | None = None
+        self._webhooks: WebhookStore | None = None
 
     def enable_filter(self, lowcut: float = 1.0, highcut: float = 40.0):
         self._filter = MultichannelFilter(
@@ -66,20 +65,16 @@ class PiEEGServer:
         self._filter = None
 
     def enable_webhooks(self, rules_path=None):
-        """Create the webhook engine (started when run() is called)."""
-        kwargs = {"acquisition": self._acq,
-                  "num_channels": self._num_channels,
-                  "notify_callback": self._broadcast_webhook_event}
+        """Create the webhook store (rules + HTTP relay)."""
+        kwargs = {}
         if rules_path:
             kwargs["rules_path"] = rules_path
-        self._webhooks = WebhookEngine(**kwargs)
+        self._webhooks = WebhookStore(**kwargs)
         logger.info("Webhooks enabled (%d rules loaded)",
                     len(self._webhooks.list_rules()))
 
     async def run(self):
         """Start the WebSocket server and the broadcast loop."""
-        if self._webhooks:
-            self._webhook_task = asyncio.create_task(self._webhooks.run())
         async with websockets.serve(
             self._handle_client, self._host, self._port,
             ping_interval=20, ping_timeout=10,
@@ -158,6 +153,8 @@ class PiEEGServer:
             await self._ws_webhook_delete(ws, msg)
         elif cmd == "webhook_test":
             await self._ws_webhook_test(ws, msg)
+        elif cmd == "webhook_fire":
+            await self._ws_webhook_fire(ws, msg)
 
     async def _start_recording(self):
         """Start recording EEG data to a timestamped CSV file."""
@@ -285,8 +282,26 @@ class PiEEGServer:
         result = await self._webhooks.test_rule(rule_id)
         await ws.send(json.dumps({"webhook_test": result}))
 
+    async def _ws_webhook_fire(self, ws, msg):
+        """Browser evaluated a trigger — relay the HTTP call."""
+        if not self._webhooks:
+            return
+        rule_id = msg.get("rule_id")
+        value = float(msg.get("value", 0))
+        result = await self._webhooks.fire_rule(rule_id, value)
+        if result.get("ok"):
+            event = {
+                "webhook_event": {
+                    "rule_id": rule_id,
+                    "value": round(value, 4),
+                    "ts": time.time(),
+                }
+            }
+            await self._broadcast_webhook_event(event)
+        await ws.send(json.dumps({"webhook_fire": result}))
+
     async def _broadcast_webhook_event(self, event: dict):
-        """Called by WebhookEngine when a rule fires — relay to all clients."""
+        """Relay webhook events to all connected dashboard clients."""
         if not self._clients:
             return
         payload = json.dumps(event)

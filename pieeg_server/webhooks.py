@@ -1,9 +1,9 @@
 """
-Webhook engine for PiEEG: evaluates trigger rules against live EEG data
-and fires HTTP callbacks when conditions are met.
+Webhook rules store and HTTP relay for PiEEG.
 
-Runs as an async task on the server, subscribing to the acquisition queue.
 Rules are persisted to a JSON file on disk.
+Trigger evaluation happens client-side (browser already has FFT);
+the server only stores rules and relays HTTP calls.
 """
 
 import asyncio
@@ -13,26 +13,9 @@ import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from string import Template
 from urllib.request import Request, urlopen
 
-import numpy as np
-from scipy import signal as sp_signal
-
 logger = logging.getLogger("pieeg.webhooks")
-
-SAMPLE_RATE = 250
-FFT_SIZE = 256  # ~1 s window at 250 Hz
-EVAL_INTERVAL = 1.0  # evaluate rules every N seconds
-
-# Frequency bands (Hz)
-BANDS = {
-    "delta": (0.5, 4.0),
-    "theta": (4.0, 8.0),
-    "alpha": (8.0, 13.0),
-    "beta": (13.0, 30.0),
-    "gamma": (30.0, 45.0),
-}
 
 TRIGGER_TYPES = [
     "band_power_above",
@@ -44,33 +27,6 @@ TRIGGER_TYPES = [
 ]
 
 DEFAULT_RULES_PATH = Path("webhooks.json")
-
-# Hanning window (precomputed)
-_hanning = np.hanning(FFT_SIZE).astype(np.float64)
-_freqs = np.fft.rfftfreq(FFT_SIZE, d=1.0 / SAMPLE_RATE)
-
-# Precompute band masks to avoid recomputing every eval
-_band_masks = {
-    band: (_freqs >= lo) & (_freqs <= hi)
-    for band, (lo, hi) in BANDS.items()
-}
-
-
-def _band_power(psd: np.ndarray, band: str) -> float:
-    """Compute power in a frequency band from one-sided PSD."""
-    mask = _band_masks[band]
-    if not np.any(mask):
-        return 0.0
-    return float(np.mean(psd[mask]))
-
-
-def _compute_psd(samples: np.ndarray) -> np.ndarray:
-    """Compute one-sided PSD (µV²/Hz) from a 1-D array of FFT_SIZE samples."""
-    windowed = samples * _hanning
-    spectrum = np.fft.rfft(windowed)
-    psd = (np.abs(spectrum) ** 2) / (SAMPLE_RATE * FFT_SIZE)
-    psd[1:-1] *= 2  # double non-DC, non-Nyquist
-    return psd
 
 
 class WebhookRule:
@@ -123,34 +79,20 @@ class WebhookRule:
         return cls(**{k: v for k, v in d.items() if k in cls.__slots__})
 
 
-class WebhookEngine:
+class WebhookStore:
     """
-    Evaluates webhook rules against live EEG data and fires HTTP callbacks.
+    Stores webhook rules on disk and relays HTTP calls.
 
-    Subscribes to the acquisition queue, maintains a per-channel ring buffer,
-    runs FFT every ~1 s, and evaluates all enabled rules.
+    Trigger evaluation is done client-side (browser FFT).
+    The browser sends 'webhook_fire' when a rule triggers,
+    and the server relays the HTTP request.
     """
 
-    def __init__(self, acquisition, num_channels: int = 16,
-                 rules_path: Path | str = DEFAULT_RULES_PATH,
-                 notify_callback=None):
-        self._acq = acquisition
-        self._num_channels = num_channels
+    def __init__(self, rules_path: Path | str = DEFAULT_RULES_PATH):
         self._rules_path = Path(rules_path)
         self._rules: list[WebhookRule] = []
-        self._notify = notify_callback  # async fn(event_dict)
-
-        # Ring buffer: (num_channels, FFT_SIZE)
-        self._buf = np.zeros((num_channels, FFT_SIZE), dtype=np.float64)
-        self._ordered = np.empty(FFT_SIZE, dtype=np.float64)  # reusable scratch
-        self._write_idx = 0
-        self._samples_in_buf = 0
-        self._save_pending = False  # throttle disk writes
-
-        # HTTP executor (bounded to avoid runaway threads)
         self._http_pool = ThreadPoolExecutor(max_workers=2,
                                              thread_name_prefix="webhook-http")
-        self._queue = acquisition.subscribe()
         self._load_rules()
 
     # ── Rule CRUD ──────────────────────────────────────────────
@@ -219,185 +161,58 @@ class WebhookEngine:
         except Exception as e:
             logger.warning("Failed to save webhook rules: %s", e)
 
-    # ── Main loop ──────────────────────────────────────────────
+    # ── HTTP relay (called when browser triggers a rule) ───────
 
-    async def run(self):
-        """Main async loop: ingest frames, periodically evaluate rules."""
-        loop = asyncio.get_event_loop()
-        last_eval = 0.0
-
-        while True:
-            frame = await self._queue.get()
-            channels = frame["channels"]
-
-            # Write into ring buffer
-            idx = self._write_idx % FFT_SIZE
-            for ch in range(min(len(channels), self._num_channels)):
-                self._buf[ch, idx] = channels[ch]
-            self._write_idx += 1
-            self._samples_in_buf = min(self._samples_in_buf + 1, FFT_SIZE)
-
-            # Evaluate rules every EVAL_INTERVAL seconds
-            now = time.monotonic()
-            if now - last_eval < EVAL_INTERVAL:
-                continue
-            last_eval = now
-
-            if self._samples_in_buf < FFT_SIZE:
-                continue  # not enough data yet
-
-            # Determine which channels any rule actually needs
-            needed_channels = set()
-            has_active = False
-            for rule in self._rules:
-                if not rule.enabled:
-                    continue
-                if now - rule.last_fired < rule.cooldown:
-                    continue
-                has_active = True
-                ch = rule.params.get("channel", 0)
-                if ch == "avg":
-                    needed_channels = set(range(self._num_channels))
-                    break
-                needed_channels.add(int(ch))
-
-            if not has_active:
-                continue
-
-            if not needed_channels:
-                needed_channels = set(range(self._num_channels))
-
-            # Compute band powers only for needed channels
-            band_powers = {}
-            amplitudes = {}
-            start = self._write_idx % FFT_SIZE
-            for ch in needed_channels:
-                # Direct slice + concat instead of np.roll (zero-copy)
-                row = self._buf[ch]
-                self._ordered[:FFT_SIZE - start] = row[start:]
-                self._ordered[FFT_SIZE - start:] = row[:start]
-                psd = _compute_psd(self._ordered)
-                bp = {band: _band_power(psd, band) for band in BANDS}
-                band_powers[ch] = bp
-                amplitudes[ch] = float(np.max(np.abs(self._ordered)))
-
-            # Evaluate each rule
-            for rule in self._rules:
-                if not rule.enabled:
-                    continue
-                if now - rule.last_fired < rule.cooldown:
-                    continue
-
-                triggered, value = self._evaluate_rule(
-                    rule, band_powers, amplitudes
-                )
-                if triggered:
-                    rule.last_fired = now
-                    rule.fire_count += 1
-                    self._save_pending = True
-
-                    event = {
-                        "webhook_event": {
-                            "rule_id": rule.id,
-                            "rule_name": rule.name,
-                            "trigger_type": rule.trigger_type,
-                            "value": round(value, 4),
-                            "threshold": rule.params.get("threshold", 0),
-                            "ts": time.time(),
-                        }
-                    }
-                    logger.info("Webhook fired: %s (value=%.2f)", rule.name, value)
-
-                    # Notify dashboard
-                    if self._notify:
-                        try:
-                            await self._notify(event)
-                        except Exception:
-                            pass
-
-                    # Fire HTTP in background thread
-                    if rule.url:
-                        loop.run_in_executor(
-                            self._http_pool,
-                            self._fire_http, rule, value
-                        )
-
-            # Batch-save to disk once per eval cycle (not per rule fire)
-            if self._save_pending:
-                self._save_pending = False
+    async def fire_rule(self, rule_id: str, value: float = 0.0) -> dict:
+        """
+        Fire a webhook for a rule. Called by the browser when a trigger
+        condition is met client-side. The server relays the HTTP request.
+        """
+        for r in self._rules:
+            if r.id == rule_id:
+                if not r.url:
+                    return {"ok": False, "error": "no_url"}
+                # Cooldown check (server-side enforcement)
+                now = time.monotonic()
+                if now - r.last_fired < r.cooldown:
+                    return {"ok": False, "error": "cooldown"}
+                r.last_fired = now
+                r.fire_count += 1
                 self._save_rules()
+                loop = asyncio.get_event_loop()
+                loop.run_in_executor(
+                    self._http_pool, self._send_http, r, value
+                )
+                return {"ok": True, "rule_id": rule_id}
+        return {"ok": False, "error": "rule_not_found"}
 
-    # ── Rule evaluation ────────────────────────────────────────
+    async def test_rule(self, rule_id: str) -> dict:
+        """Fire a test webhook (ignores cooldown)."""
+        for r in self._rules:
+            if r.id == rule_id:
+                if not r.url:
+                    return {"ok": False, "error": "no_url"}
+                loop = asyncio.get_event_loop()
+                await loop.run_in_executor(
+                    self._http_pool, self._send_http, r, 0.0
+                )
+                return {"ok": True, "rule_id": rule_id}
+        return {"ok": False, "error": "rule_not_found"}
 
-    def _evaluate_rule(self, rule: WebhookRule,
-                       band_powers: dict, amplitudes: dict) -> tuple[bool, float]:
-        """Returns (triggered: bool, measured_value: float)."""
-        tt = rule.trigger_type
-        p = rule.params
-        ch = p.get("channel", 0)
-        threshold = p.get("threshold", 0.0)
-
-        if tt == "band_power_above":
-            band = p.get("band", "alpha")
-            val = self._get_band_value(band_powers, band, ch)
-            return val > threshold, val
-
-        elif tt == "band_power_below":
-            band = p.get("band", "alpha")
-            val = self._get_band_value(band_powers, band, ch)
-            return val < threshold, val
-
-        elif tt == "amplitude_above":
-            val = self._get_amplitude(amplitudes, ch)
-            return val > threshold, val
-
-        elif tt == "amplitude_below":
-            val = self._get_amplitude(amplitudes, ch)
-            return val < threshold, val
-
-        elif tt == "band_ratio_above":
-            num_band = p.get("numerator", "alpha")
-            den_band = p.get("denominator", "theta")
-            val = self._get_ratio(band_powers, num_band, den_band, ch)
-            return val > threshold, val
-
-        elif tt == "band_ratio_below":
-            num_band = p.get("numerator", "alpha")
-            den_band = p.get("denominator", "theta")
-            val = self._get_ratio(band_powers, num_band, den_band, ch)
-            return val < threshold, val
-
-        return False, 0.0
-
-    def _get_band_value(self, band_powers: dict, band: str, ch) -> float:
-        if ch == "avg":
-            vals = [band_powers[c].get(band, 0)
-                    for c in range(self._num_channels)]
-            return sum(vals) / len(vals) if vals else 0.0
-        return band_powers.get(int(ch), {}).get(band, 0.0)
-
-    def _get_amplitude(self, amplitudes: dict, ch) -> float:
-        if ch == "avg":
-            vals = [amplitudes.get(c, 0) for c in range(self._num_channels)]
-            return sum(vals) / len(vals) if vals else 0.0
-        return amplitudes.get(int(ch), 0.0)
-
-    def _get_ratio(self, band_powers: dict, num: str, den: str, ch) -> float:
-        num_val = self._get_band_value(band_powers, num, ch)
-        den_val = self._get_band_value(band_powers, den, ch)
-        if den_val < 1e-9:
-            return 0.0
-        return num_val / den_val
-
-    # ── HTTP delivery ──────────────────────────────────────────
-
-    def _fire_http(self, rule: WebhookRule, value: float):
+    def _send_http(self, rule: WebhookRule, value: float):
         """Send webhook HTTP request (runs in thread pool)."""
         try:
-            body = self._render_body(rule, value)
+            body = json.dumps({
+                "event": rule.trigger_type,
+                "rule": rule.name,
+                "value": round(value, 4),
+                "threshold": rule.params.get("threshold", 0),
+                "channel": rule.params.get("channel", 0),
+                "timestamp": time.time(),
+            })
             req = Request(
                 rule.url,
-                data=body.encode("utf-8") if body else None,
+                data=body.encode("utf-8"),
                 method=rule.method,
             )
             req.add_header("Content-Type", "application/json")
@@ -409,43 +224,6 @@ class WebhookEngine:
         except Exception as e:
             logger.warning("Webhook delivery failed (%s): %s", rule.url, e)
 
-    def _render_body(self, rule: WebhookRule, value: float) -> str:
-        """Render the body template with trigger variables."""
-        if rule.body_template:
-            tpl = Template(rule.body_template)
-            return tpl.safe_substitute(
-                trigger_type=rule.trigger_type,
-                rule_name=rule.name,
-                value=round(value, 4),
-                threshold=rule.params.get("threshold", 0),
-                channel=rule.params.get("channel", 0),
-                band=rule.params.get("band", ""),
-                ts=time.time(),
-            )
-        # Default JSON body
-        return json.dumps({
-            "event": rule.trigger_type,
-            "rule": rule.name,
-            "value": round(value, 4),
-            "threshold": rule.params.get("threshold", 0),
-            "channel": rule.params.get("channel", 0),
-            "timestamp": time.time(),
-        })
-
-    # ── Test ───────────────────────────────────────────────────
-
-    async def test_rule(self, rule_id: str) -> dict:
-        """Fire a test webhook for a rule (ignores cooldown)."""
-        for r in self._rules:
-            if r.id == rule_id:
-                loop = asyncio.get_event_loop()
-                await loop.run_in_executor(
-                    self._http_pool, self._fire_http, r, 0.0
-                )
-                return {"ok": True, "rule_id": rule_id}
-        return {"ok": False, "error": "rule_not_found"}
-
     def stop(self):
         """Cleanup."""
         self._http_pool.shutdown(wait=False)
-        self._acq.unsubscribe(self._queue)

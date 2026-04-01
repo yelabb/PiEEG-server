@@ -16,6 +16,7 @@ import UpdateBanner from "./components/UpdateBanner";
 import ShortcutHelp from "./components/ShortcutHelp";
 import ChatPanel from "./components/ChatPanel";
 import WebhookPanel from "./components/WebhookPanel";
+import { useWebhooks } from "./hooks/useWebhooks";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { NUM_CHANNELS } from "./types";
 import type { SelectOption } from "./types";
@@ -54,8 +55,21 @@ export default function App() {
   const [showStats, setShowStats] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [showWebhooks, setShowWebhooks] = useState(false);
+  const [webhooksEnabled, setWebhooksEnabled] = useState(
+    () => localStorage.getItem("pieeg_webhooks_enabled") === "true"
+  );
   const eeg = useEEG(timeWindow);
   const numCh = eeg.numChannels;
+
+  const toggleWebhooksEnabled = useCallback(() => {
+    setWebhooksEnabled((prev) => {
+      const next = !prev;
+      localStorage.setItem("pieeg_webhooks_enabled", String(next));
+      return next;
+    });
+  }, []);
+
+  const webhooks = useWebhooks(webhooksEnabled, eeg.data, eeg.sendCommand);
 
   const allChannels = new Set(Array.from({ length: numCh }, (_, i) => i));
 
@@ -305,7 +319,7 @@ export default function App() {
           className={`btn${showWebhooks ? " active" : ""}`}
           onClick={() => setShowWebhooks((v) => !v)}
         >
-          Webhooks
+          Webhooks{webhooksEnabled && <span className="wh-active-dot" />}
         </button>
         <button
           className="btn btn-xr"
@@ -506,8 +520,10 @@ export default function App() {
       <WebhookPanel
         open={showWebhooks}
         onClose={() => setShowWebhooks(false)}
-        sendCommand={eeg.sendCommand}
         numChannels={numCh}
+        webhooks={webhooks}
+        webhooksEnabled={webhooksEnabled}
+        onToggleEnabled={toggleWebhooksEnabled}
       />
 
       {/* Keyboard shortcut help (press ? to toggle) */}

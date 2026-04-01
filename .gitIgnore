@@ -16,3 +16,4 @@ logs
 dashboard/node_modules/
 recordings/*.csv
 recordings/*.json
+webhooks.json

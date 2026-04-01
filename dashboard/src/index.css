@@ -2586,6 +2586,80 @@ body {
   color: var(--text);
 }
 
+/* Intro description */
+.wh-intro {
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.5;
+  margin: 0;
+  padding: 6px 12px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Help hint badge */
+.wh-hint {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  cursor: help;
+  margin-left: 4px;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+.wh-hint:hover {
+  color: var(--text);
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* Active indicator dot on Webhooks button */
+.wh-active-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  background: #3fb950;
+  border-radius: 50%;
+  margin-left: 5px;
+  vertical-align: middle;
+  animation: wh-pulse 2s ease-in-out infinite;
+}
+
+@keyframes wh-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* Enable/disable toggle row */
+.wh-enable-row {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.wh-toggle-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.wh-toggle-main input[type="checkbox"] {
+  accent-color: #3fb950;
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+
 /* Tabs */
 .webhook-tabs {
   display: flex;

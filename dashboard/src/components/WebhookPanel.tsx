@@ -1,12 +1,12 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState } from "react";
 import {
   TRIGGER_TYPES,
   BANDS,
   type TriggerType,
   type WebhookRule,
   type WebhookEvent,
-  type WSWebhookMessage,
 } from "../types";
+import type { UseWebhooksReturn } from "../hooks/useWebhooks";
 
 // ── trigger labels / descriptions ─────────────────────────────────────────
 
@@ -18,6 +18,12 @@ const TRIGGER_LABELS: Record<TriggerType, string> = {
   band_ratio_above: "Band ratio above",
   band_ratio_below: "Band ratio below",
 };
+
+// ── inline help tooltip ───────────────────────────────────────────────────
+
+function Hint({ text }: { text: string }) {
+  return <span className="wh-hint" title={text}>?</span>;
+}
 
 const NEEDS_BAND = new Set<TriggerType>([
   "band_power_above", "band_power_below",
@@ -34,73 +40,24 @@ const NEEDS_CHANNEL = new Set<TriggerType>([
 interface Props {
   open: boolean;
   onClose: () => void;
-  sendCommand: (cmd: Record<string, unknown>) => void;
   numChannels: number;
+  webhooks: UseWebhooksReturn;
+  webhooksEnabled: boolean;
+  onToggleEnabled: () => void;
 }
 
-export default function WebhookPanel({ open, onClose, sendCommand, numChannels }: Props) {
-  const [rules, setRules] = useState<WebhookRule[]>([]);
-  const [events, setEvents] = useState<WebhookEvent[]>([]);
+export default function WebhookPanel({
+  open, onClose, numChannels, webhooks, webhooksEnabled, onToggleEnabled,
+}: Props) {
+  const { rules, events, saveRule, deleteRule, testRule, toggleRule } = webhooks;
   const [editing, setEditing] = useState<WebhookRule | null>(null);
   const [tab, setTab] = useState<"rules" | "log">("rules");
-  const eventsRef = useRef(events);
-  eventsRef.current = events;
-
-  // Load rules on open
-  useEffect(() => {
-    if (open) sendCommand({ cmd: "webhook_list" });
-  }, [open, sendCommand]);
-
-  // Listen for webhook messages from the WS (attached to global handler)
-  const handleWSMessage = useCallback((msg: WSWebhookMessage) => {
-    if (msg.webhook_rules) setRules(msg.webhook_rules);
-    if (msg.webhook_created) setRules((prev) => [...prev, msg.webhook_created!]);
-    if (msg.webhook_updated) {
-      setRules((prev) =>
-        prev.map((r) => (r.id === msg.webhook_updated!.id ? msg.webhook_updated! : r))
-      );
-    }
-    if (msg.webhook_deleted !== undefined) {
-      // Rule list will be refreshed
-      sendCommand({ cmd: "webhook_list" });
-    }
-    if (msg.webhook_event) {
-      const ev = msg.webhook_event;
-      setEvents((prev) => [ev, ...prev].slice(0, 50));
-    }
-  }, [sendCommand]);
-
-  // Expose handler so parent can wire it
-  useEffect(() => {
-    (window as unknown as Record<string, unknown>).__webhookHandler = handleWSMessage;
-    return () => { delete (window as unknown as Record<string, unknown>).__webhookHandler; };
-  }, [handleWSMessage]);
 
   if (!open) return null;
 
-  function saveRule(rule: Partial<WebhookRule> & { id?: string }) {
-    if (rule.id && rules.some((r) => r.id === rule.id)) {
-      sendCommand({ cmd: "webhook_update", rule_id: rule.id, rule });
-    } else {
-      sendCommand({ cmd: "webhook_create", rule });
-    }
+  function handleSave(rule: Partial<WebhookRule> & { id?: string }) {
+    saveRule(rule);
     setEditing(null);
-  }
-
-  function deleteRule(id: string) {
-    sendCommand({ cmd: "webhook_delete", rule_id: id });
-  }
-
-  function testRule(id: string) {
-    sendCommand({ cmd: "webhook_test", rule_id: id });
-  }
-
-  function toggleRule(rule: WebhookRule) {
-    sendCommand({
-      cmd: "webhook_update",
-      rule_id: rule.id,
-      rule: { enabled: !rule.enabled },
-    });
   }
 
   return (
@@ -110,12 +67,26 @@ export default function WebhookPanel({ open, onClose, sendCommand, numChannels }
         <button className="btn-close" onClick={onClose}>×</button>
       </div>
 
+      <p className="wh-intro">
+        Send HTTP requests when EEG conditions are met.
+        Define rules based on band power, amplitude, or band ratios.
+        Evaluation runs in the browser — close this panel and it keeps working.
+      </p>
+
+      <div className="wh-enable-row">
+        <label className="wh-toggle-main">
+          <input type="checkbox" checked={webhooksEnabled} onChange={onToggleEnabled} />
+          <span>{webhooksEnabled ? "Evaluation active" : "Evaluation paused"}</span>
+          <Hint text="When enabled, rules are evaluated once per second against live EEG data. Disable to pause all triggers without deleting rules." />
+        </label>
+      </div>
+
       <div className="webhook-tabs">
         <button className={`wh-tab${tab === "rules" ? " active" : ""}`} onClick={() => setTab("rules")}>
-          Rules ({rules.length})
+          Rules ({rules.length}) <Hint text="Trigger rules that fire webhooks when EEG conditions are met" />
         </button>
         <button className={`wh-tab${tab === "log" ? " active" : ""}`} onClick={() => setTab("log")}>
-          Log ({events.length})
+          Log ({events.length}) <Hint text="History of recently fired webhook events" />
         </button>
       </div>
 
@@ -125,13 +96,13 @@ export default function WebhookPanel({ open, onClose, sendCommand, numChannels }
             <RuleEditor
               rule={editing}
               numChannels={numChannels}
-              onSave={saveRule}
+              onSave={handleSave}
               onCancel={() => setEditing(null)}
             />
           ) : (
             <>
               <button className="btn btn-add" onClick={() => setEditing(newRule())}>
-                + Add Rule
+                + Add Rule <Hint text="Create a new webhook rule to trigger HTTP requests on EEG events" />
               </button>
               {rules.length === 0 && (
                 <p className="wh-empty">No webhook rules configured. Add one to get started.</p>
@@ -155,7 +126,7 @@ export default function WebhookPanel({ open, onClose, sendCommand, numChannels }
                   </div>
                   <div className="wh-rule-detail">
                     <span className="wh-trigger">{TRIGGER_LABELS[r.trigger_type]}</span>
-                    {r.params.band && <span className="wh-badge">{String(r.params.band)}</span>}
+                    {r.params.band ? <span className="wh-badge">{String(r.params.band)}</span> : null}
                     {r.params.threshold !== undefined && (
                       <span className="wh-badge">≥ {String(r.params.threshold)}</span>
                     )}
@@ -267,10 +238,10 @@ function RuleEditor({
     <div className="wh-editor">
       <h3>{rule.id ? "Edit Rule" : "New Rule"}</h3>
 
-      <label>Name</label>
+      <label>Name <Hint text="A friendly name to identify this rule in the list and logs" /></label>
       <input value={name} onChange={(e) => setName(e.target.value)} placeholder="My webhook" />
 
-      <label>Trigger</label>
+      <label>Trigger <Hint text="The EEG condition to watch for. Evaluated once per second using live FFT data" /></label>
       <select value={triggerType} onChange={(e) => setTriggerType(e.target.value as TriggerType)}>
         {TRIGGER_TYPES.map((t) => (
           <option key={t} value={t}>{TRIGGER_LABELS[t]}</option>
@@ -279,7 +250,7 @@ function RuleEditor({
 
       {NEEDS_BAND.has(triggerType) && (
         <>
-          <label>Band</label>
+          <label>Band <Hint text="EEG frequency band: delta (0.5-4 Hz), theta (4-8), alpha (8-13), beta (13-30), gamma (30-100)" /></label>
           <select value={band} onChange={(e) => setBand(e.target.value)}>
             {BANDS.map((b) => <option key={b} value={b}>{b}</option>)}
           </select>
@@ -288,11 +259,11 @@ function RuleEditor({
 
       {NEEDS_RATIO.has(triggerType) && (
         <>
-          <label>Numerator band</label>
+          <label>Numerator band <Hint text="Top band in the ratio (e.g. alpha in alpha/theta)" /></label>
           <select value={numerator} onChange={(e) => setNumerator(e.target.value)}>
             {BANDS.map((b) => <option key={b} value={b}>{b}</option>)}
           </select>
-          <label>Denominator band</label>
+          <label>Denominator band <Hint text="Bottom band in the ratio (e.g. theta in alpha/theta)" /></label>
           <select value={denominator} onChange={(e) => setDenominator(e.target.value)}>
             {BANDS.map((b) => <option key={b} value={b}>{b}</option>)}
           </select>
@@ -301,7 +272,7 @@ function RuleEditor({
 
       {NEEDS_CHANNEL.has(triggerType) && (
         <>
-          <label>Channel</label>
+          <label>Channel <Hint text="Which EEG channel to monitor, or 'Average' to average all channels" /></label>
           <select value={channel} onChange={(e) => setChannel(e.target.value)}>
             <option value="avg">Average (all)</option>
             {Array.from({ length: numChannels }, (_, i) => (
@@ -311,7 +282,7 @@ function RuleEditor({
         </>
       )}
 
-      <label>Threshold</label>
+      <label>Threshold <Hint text="Value that triggers the webhook. Units depend on trigger type (µV² for band power, µV for amplitude, ratio for band ratio)" /></label>
       <input
         type="number"
         value={threshold}
@@ -319,14 +290,14 @@ function RuleEditor({
         onChange={(e) => setThreshold(e.target.value)}
       />
 
-      <label>Webhook URL</label>
+      <label>Webhook URL <Hint text="The HTTP endpoint that will receive the webhook request when triggered" /></label>
       <input
         value={url}
         onChange={(e) => setUrl(e.target.value)}
         placeholder="https://example.com/webhook"
       />
 
-      <label>Method</label>
+      <label>Method <Hint text="HTTP method to use for the webhook request" /></label>
       <select value={method} onChange={(e) => setMethod(e.target.value)}>
         <option value="POST">POST</option>
         <option value="PUT">PUT</option>
@@ -334,14 +305,14 @@ function RuleEditor({
         <option value="GET">GET</option>
       </select>
 
-      <label>Authorization header</label>
+      <label>Authorization header <Hint text="Optional auth token sent with the request, e.g. 'Bearer abc123'" /></label>
       <input
         value={authHeader}
         onChange={(e) => setAuthHeader(e.target.value)}
         placeholder="Bearer your-token-here"
       />
 
-      <label>Cooldown (seconds)</label>
+      <label>Cooldown (seconds) <Hint text="Minimum time between two consecutive fires of this rule, to avoid spamming" /></label>
       <input
         type="number"
         value={cooldown}
