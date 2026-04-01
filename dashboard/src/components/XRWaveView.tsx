@@ -1,9 +1,9 @@
-import { useRef, useEffect, useCallback } from "react";
+import { useRef, useEffect, useCallback, useState } from "react";
 import * as THREE from "three";
 import type { EEGData } from "../types";
 import { NUM_CHANNELS } from "../types";
 
-const MAX_POINTS = 400;
+const MAX_POINTS = 300;
 
 const CHANNEL_HUES = [
   0.50, 0.80, 0.95, 0.60,
@@ -12,11 +12,11 @@ const CHANNEL_HUES = [
   0.38, 0.14, 0.05, 0.55,
 ];
 
-const PANEL_RADIUS = 3.0;
-const PANEL_ARC = Math.PI * 0.75;
-const PANEL_HEIGHT = 2.6;
-const PANEL_Y_CENTER = 1.4;
-const WAVE_WIDTH = 1.8;
+const PANEL_RADIUS = 2.5;
+const PANEL_ARC = Math.PI * 0.65;
+const PANEL_HEIGHT = 2.2;
+const PANEL_Y_CENTER = 1.3;
+const WAVE_WIDTH = 1.6;
 
 interface ChannelLine {
   line: THREE.Line;
@@ -25,7 +25,6 @@ interface ChannelLine {
   colors: Float32Array;
   angle: number;
   yPos: number;
-  glowPlane: THREE.Mesh;
   baseHue: number;
 }
 
@@ -45,6 +44,10 @@ export default function XRWaveView({ eegData, yScale, onExit }: XRWaveViewProps)
   const rafRef = useRef<number | null>(null);
   const cleanedUpRef = useRef(false);
   const timerRef = useRef(new THREE.Timer());
+  const sceneReadyRef = useRef(false);
+
+  const [vrSupported, setVrSupported] = useState(false);
+  const [inVR, setInVR] = useState(false);
 
   const eegRef = useRef(eegData);
   const yScaleRef = useRef(yScale);
@@ -75,6 +78,13 @@ export default function XRWaveView({ eegData, yScale, onExit }: XRWaveViewProps)
     linesRef.current = [];
   }, []);
 
+  // Check VR support on mount
+  useEffect(() => {
+    if (navigator.xr) {
+      navigator.xr.isSessionSupported("immersive-vr").then((ok) => setVrSupported(ok)).catch(() => {});
+    }
+  }, []);
+
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -82,95 +92,48 @@ export default function XRWaveView({ eegData, yScale, onExit }: XRWaveViewProps)
     cleanedUpRef.current = false;
     const timer = timerRef.current;
 
-    // Scene setup
+    // Scene — minimal dark environment
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x03060f);
-    scene.fog = new THREE.FogExp2(0x03060f, 0.07);
+    scene.background = new THREE.Color(0x020408);
     sceneRef.current = scene;
 
-    const camera = new THREE.PerspectiveCamera(80, window.innerWidth / window.innerHeight, 0.05, 60);
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 50);
     camera.position.set(0, PANEL_Y_CENTER, 0);
     cameraRef.current = camera;
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.xr.enabled = true;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.2;
     container.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    // Lighting
-    const ambientLight = new THREE.AmbientLight(0x112244, 0.8);
-    scene.add(ambientLight);
-    const pointLight = new THREE.PointLight(0x4488ff, 1.5, 25);
-    pointLight.position.set(0, PANEL_Y_CENTER + 1, 0);
-    scene.add(pointLight);
+    // Simple lighting
+    scene.add(new THREE.AmbientLight(0x223355, 0.6));
 
-    // Starfield
-    const starCount = 1500;
+    // Sparse starfield
+    const starCount = 600;
     const starPos = new Float32Array(starCount * 3);
-    const starCol = new Float32Array(starCount * 3);
     for (let i = 0; i < starCount; i++) {
-      const r = 10 + Math.random() * 15;
+      const r = 12 + Math.random() * 12;
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(2 * Math.random() - 1);
       starPos[i * 3]     = r * Math.sin(phi) * Math.cos(theta);
       starPos[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
       starPos[i * 3 + 2] = r * Math.cos(phi);
-      starCol[i * 3]     = 0.70 + Math.random() * 0.30;
-      starCol[i * 3 + 1] = 0.75 + Math.random() * 0.25;
-      starCol[i * 3 + 2] = 0.85 + Math.random() * 0.15;
     }
     const starGeo = new THREE.BufferGeometry();
     starGeo.setAttribute("position", new THREE.BufferAttribute(starPos, 3));
-    starGeo.setAttribute("color", new THREE.BufferAttribute(starCol, 3));
-    const starMat = new THREE.PointsMaterial({
-      size: 0.05,
-      vertexColors: true,
+    const stars = new THREE.Points(starGeo, new THREE.PointsMaterial({
+      size: 0.04,
+      color: 0x8899bb,
       transparent: true,
-      opacity: 0.85,
+      opacity: 0.7,
       sizeAttenuation: true,
-    });
-    const stars = new THREE.Points(starGeo, starMat);
+    }));
     scene.add(stars);
 
-    // Nebula particle clouds
-    interface NebulaDef {
-      color: number;
-      center: [number, number, number];
-      count: number;
-      spread: number;
-    }
-    const nebulaDefs: NebulaDef[] = [
-      { color: 0x4a1080, center: [ 5,  2, -10], count: 400, spread: 5 },
-      { color: 0x0a2a60, center: [-6,  1,  -9], count: 350, spread: 4 },
-      { color: 0x003a50, center: [ 1,  4, -12], count: 300, spread: 4 },
-    ];
-    const nebulaClouds = nebulaDefs.map(({ color, center, count, spread }) => {
-      const pos = new Float32Array(count * 3);
-      for (let i = 0; i < count; i++) {
-        pos[i * 3]     = center[0] + (Math.random() - 0.5) * spread;
-        pos[i * 3 + 1] = center[1] + (Math.random() - 0.5) * spread;
-        pos[i * 3 + 2] = center[2] + (Math.random() - 0.5) * spread;
-      }
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-      const mat = new THREE.PointsMaterial({
-        color,
-        size: 0.12,
-        transparent: true,
-        opacity: 0.16,
-        sizeAttenuation: true,
-        depthWrite: false,
-      });
-      const pts = new THREE.Points(geo, mat);
-      scene.add(pts);
-      return pts;
-    });
-
-    // Channel wave strips
+    // Channel wave lines — no labels, no glow planes
     const lines: ChannelLine[] = [];
     const tempColor = new THREE.Color();
     for (let ch = 0; ch < NUM_CHANNELS; ch++) {
@@ -189,67 +152,22 @@ export default function XRWaveView({ eegData, yScale, onExit }: XRWaveViewProps)
       const material = new THREE.LineBasicMaterial({
         vertexColors: true,
         transparent: true,
-        opacity: 0.92,
+        opacity: 0.9,
         linewidth: 2,
       });
 
       const line = new THREE.Line(geometry, material);
       scene.add(line);
-
-      // Channel label sprite
-      const labelCanvas = document.createElement("canvas");
-      labelCanvas.width = 128;
-      labelCanvas.height = 48;
-      const ctx2d = labelCanvas.getContext("2d")!;
-      ctx2d.clearRect(0, 0, 128, 48);
-      tempColor.setHSL(baseHue, 0.9, 0.7);
-      ctx2d.font = "bold 28px monospace";
-      ctx2d.fillStyle = `#${tempColor.getHexString()}`;
-      ctx2d.textAlign = "center";
-      ctx2d.textBaseline = "middle";
-      ctx2d.fillText(`Ch ${ch + 1}`, 64, 24);
-      const texture = new THREE.CanvasTexture(labelCanvas);
-      const spriteMat = new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: 0.65 });
-      const sprite = new THREE.Sprite(spriteMat);
-      sprite.scale.set(0.4, 0.15, 1);
-      const labelX = Math.sin(angle) * (PANEL_RADIUS + 0.05);
-      const labelZ = -Math.cos(angle) * (PANEL_RADIUS + 0.05);
-      const waveStartX = labelX - Math.cos(angle) * (WAVE_WIDTH / 2);
-      const waveStartZ = labelZ + Math.sin(angle) * (WAVE_WIDTH / 2);
-      sprite.position.set(
-        waveStartX - Math.cos(angle) * 0.3,
-        yPos,
-        waveStartZ + Math.sin(angle) * 0.3,
-      );
-      scene.add(sprite);
-
-      // Glow plane behind each wave
-      const glowGeo = new THREE.PlaneGeometry(WAVE_WIDTH + 0.3, 0.14);
-      const glowMat = new THREE.MeshBasicMaterial({
-        color: new THREE.Color().setHSL(baseHue, 1.0, 0.55),
-        transparent: true,
-        opacity: 0.05,
-        side: THREE.DoubleSide,
-        depthWrite: false,
-      });
-      const glowPlane = new THREE.Mesh(glowGeo, glowMat);
-      glowPlane.position.set(
-        Math.sin(angle) * PANEL_RADIUS,
-        yPos,
-        -Math.cos(angle) * PANEL_RADIUS,
-      );
-      glowPlane.rotation.y = angle;
-      scene.add(glowPlane);
-
-      lines.push({ line, geometry, positions, colors, angle, yPos, glowPlane, baseHue });
+      lines.push({ line, geometry, positions, colors, angle, yPos, baseHue });
     }
     linesRef.current = lines;
 
-    // Ground grid
-    const gridHelper = new THREE.GridHelper(12, 24, 0x0a1530, 0x060e1e);
-    scene.add(gridHelper);
+    // Subtle ground grid
+    scene.add(new THREE.GridHelper(8, 16, 0x0a1530, 0x060e1e));
 
-    // Update wave data + animate environment each frame
+    sceneReadyRef.current = true;
+
+    // Update wave data each frame
     function updateWaves(time: number) {
       const e = eegRef.current;
       const bufs = e.buffers.current;
@@ -259,14 +177,12 @@ export default function XRWaveView({ eegData, yScale, onExit }: XRWaveViewProps)
       const bufSize = e.bufferSize;
       if (count < 2) return;
 
-      timer.update();
-
       const skip = count > MAX_POINTS ? Math.floor(count / MAX_POINTS) : 1;
       const drawCount = Math.min(MAX_POINTS, Math.ceil(count / skip));
       const range = yScaleRef.current || 100;
 
       for (let ch = 0; ch < NUM_CHANNELS; ch++) {
-        const { positions, colors, geometry, angle, yPos, glowPlane, baseHue } = lines[ch];
+        const { positions, colors, geometry, angle, yPos, baseHue } = lines[ch];
         const buf = bufs[ch];
         if (!buf) continue;
 
@@ -275,16 +191,13 @@ export default function XRWaveView({ eegData, yScale, onExit }: XRWaveViewProps)
         const dx = -Math.cos(angle);
         const dz = -Math.sin(angle);
 
-        const hue = (baseHue + Math.sin(time * 0.08 + ch * 0.4) * 0.08 + 1) % 1;
-        const sat = 0.85 + Math.sin(time * 0.15 + ch) * 0.10;
+        const hue = (baseHue + Math.sin(time * 0.08 + ch * 0.4) * 0.06 + 1) % 1;
 
-        let rmsSum = 0;
         for (let i = 0; i < drawCount; i++) {
           const sampleI = i * skip;
           const idx = (writeIdx - count + sampleI + bufSize) % bufSize;
           const tPos = i / Math.max(1, drawCount - 1);
           const amplitude = buf[idx] / range;
-          rmsSum += amplitude * amplitude;
 
           positions[i * 3]     = cx + dx * (tPos - 0.5) * WAVE_WIDTH;
           positions[i * 3 + 1] = yPos + amplitude * 0.14;
@@ -293,7 +206,7 @@ export default function XRWaveView({ eegData, yScale, onExit }: XRWaveViewProps)
           const edgeFade  = Math.sin(tPos * Math.PI);
           const ampBright = 0.35 + Math.min(Math.abs(amplitude) * 3.0, 1.0) * 0.65;
           const lightness = Math.min(0.95, 0.5 * edgeFade + ampBright * 0.5);
-          tempColor.setHSL(hue, sat, lightness);
+          tempColor.setHSL(hue, 0.85, lightness);
           colors[i * 3]     = tempColor.r;
           colors[i * 3 + 1] = tempColor.g;
           colors[i * 3 + 2] = tempColor.b;
@@ -302,62 +215,12 @@ export default function XRWaveView({ eegData, yScale, onExit }: XRWaveViewProps)
         geometry.attributes.position.needsUpdate = true;
         geometry.attributes.color.needsUpdate = true;
         geometry.setDrawRange(0, drawCount);
-
-        const rms = Math.sqrt(rmsSum / Math.max(1, drawCount));
-        (glowPlane.material as THREE.MeshBasicMaterial).opacity = Math.min(0.20, 0.03 + rms * 0.9);
       }
 
-      ambientLight.intensity = 0.60 + Math.sin(time * 0.50) * 0.15;
-      pointLight.intensity   = 1.20 + Math.sin(time * 0.30) * 0.40;
-
-      stars.rotation.y = time * 0.005;
-      stars.rotation.x = Math.sin(time * 0.003) * 0.02;
-
-      nebulaClouds.forEach((cloud, i) => {
-        (cloud.material as THREE.PointsMaterial).opacity = 0.10 + Math.sin(time * 0.20 + i * 2.1) * 0.06;
-        cloud.rotation.y = time * 0.003 * (i % 2 === 0 ? 1 : -1);
-      });
+      stars.rotation.y = time * 0.004;
     }
 
-    // Try immersive VR (Oculus), fallback to inline
-    async function startXR() {
-      let xrMode: XRSessionMode | null = null;
-
-      if (navigator.xr) {
-        for (const mode of ["immersive-vr", "immersive-ar", "inline"] as XRSessionMode[]) {
-          try {
-            if (await navigator.xr.isSessionSupported(mode)) {
-              xrMode = mode;
-              break;
-            }
-          } catch { /* continue */ }
-        }
-      }
-
-      if (xrMode && xrMode !== "inline") {
-        try {
-          const session = await navigator.xr!.requestSession(xrMode, {
-            optionalFeatures: ["local-floor", "bounded-floor", "hand-tracking"],
-          });
-          sessionRef.current = session;
-          renderer.xr.setSession(session);
-          session.addEventListener("end", () => {
-            sessionRef.current = null;
-            onExitRef.current();
-          });
-
-          renderer.setAnimationLoop(() => {
-            timer.update();
-            updateWaves(timer.getElapsed());
-            renderer.render(scene, camera);
-          });
-          return;
-        } catch { /* fall through to 3D fallback */ }
-      }
-
-      startFallback3D();
-    }
-
+    // 3D fallback (non-VR browsers / desktop preview)
     function startFallback3D() {
       let isDragging = false;
       let prevX = 0, prevY = 0;
@@ -385,18 +248,15 @@ export default function XRWaveView({ eegData, yScale, onExit }: XRWaveViewProps)
         camera.rotation.order = "YXZ";
         camera.rotation.y = rotY;
         camera.rotation.x = rotX;
-
         updateWaves(t);
         renderer.render(scene, camera);
         rafRef.current = requestAnimationFrame(fallbackLoop);
       }
-
       rafRef.current = requestAnimationFrame(fallbackLoop);
     }
 
-    startXR();
+    startFallback3D();
 
-    // Resize handler
     function onResize() {
       if (!rendererRef.current) return;
       camera.aspect = window.innerWidth / window.innerHeight;
@@ -414,17 +274,113 @@ export default function XRWaveView({ eegData, yScale, onExit }: XRWaveViewProps)
     };
   }, []); // mount-only — props read via refs
 
+  // Enter immersive VR — MUST be called from a user gesture (click/tap)
+  const enterVR = useCallback(async () => {
+    const renderer = rendererRef.current;
+    if (!renderer || !navigator.xr) return;
+
+    try {
+      const session = await navigator.xr.requestSession("immersive-vr", {
+        optionalFeatures: ["local-floor", "bounded-floor", "hand-tracking"],
+      });
+      sessionRef.current = session;
+      setInVR(true);
+
+      // Stop the fallback rAF loop
+      if (rafRef.current != null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+
+      await renderer.xr.setSession(session);
+
+      session.addEventListener("end", () => {
+        sessionRef.current = null;
+        setInVR(false);
+        // Restart fallback loop would require re-mount; just exit
+        onExitRef.current();
+      });
+
+      const timer = timerRef.current;
+      renderer.setAnimationLoop(() => {
+        timer.update();
+        const t = timer.getElapsed();
+        // Update waves
+        const e = eegRef.current;
+        const bufs = e.buffers.current;
+        if (bufs) {
+          const count = e.samplesInBuffer.current;
+          const writeIdx = e.writeIndex.current;
+          const bufSize = e.bufferSize;
+          if (count >= 2) {
+            const skip = count > MAX_POINTS ? Math.floor(count / MAX_POINTS) : 1;
+            const drawCount = Math.min(MAX_POINTS, Math.ceil(count / skip));
+            const range = yScaleRef.current || 100;
+            const lines = linesRef.current;
+            const tc = new THREE.Color();
+
+            for (let ch = 0; ch < lines.length; ch++) {
+              const { positions, colors, geometry, angle, yPos, baseHue } = lines[ch];
+              const buf = bufs[ch];
+              if (!buf) continue;
+
+              const cx = Math.sin(angle) * PANEL_RADIUS;
+              const cz = -Math.cos(angle) * PANEL_RADIUS;
+              const dx = -Math.cos(angle);
+              const dz = -Math.sin(angle);
+              const hue = (baseHue + Math.sin(t * 0.08 + ch * 0.4) * 0.06 + 1) % 1;
+
+              for (let i = 0; i < drawCount; i++) {
+                const sampleI = i * skip;
+                const idx = (writeIdx - count + sampleI + bufSize) % bufSize;
+                const tPos = i / Math.max(1, drawCount - 1);
+                const amplitude = buf[idx] / range;
+
+                positions[i * 3]     = cx + dx * (tPos - 0.5) * WAVE_WIDTH;
+                positions[i * 3 + 1] = yPos + amplitude * 0.14;
+                positions[i * 3 + 2] = cz + dz * (tPos - 0.5) * WAVE_WIDTH;
+
+                const edgeFade  = Math.sin(tPos * Math.PI);
+                const ampBright = 0.35 + Math.min(Math.abs(amplitude) * 3.0, 1.0) * 0.65;
+                const lightness = Math.min(0.95, 0.5 * edgeFade + ampBright * 0.5);
+                tc.setHSL(hue, 0.85, lightness);
+                colors[i * 3]     = tc.r;
+                colors[i * 3 + 1] = tc.g;
+                colors[i * 3 + 2] = tc.b;
+              }
+
+              geometry.attributes.position.needsUpdate = true;
+              geometry.attributes.color.needsUpdate = true;
+              geometry.setDrawRange(0, drawCount);
+            }
+          }
+        }
+
+        if (sceneRef.current && cameraRef.current) {
+          renderer.render(sceneRef.current, cameraRef.current);
+        }
+      });
+    } catch (err) {
+      console.warn("Failed to enter VR:", err);
+    }
+  }, []);
+
   return (
     <div className="xr-overlay">
       <div className="xr-container" ref={containerRef} />
       <div className="xr-hud">
         <button className="btn xr-exit-btn" onClick={() => { cleanup(); onExitRef.current(); }}>
-          ✕ Exit XR
+          ✕ Exit
         </button>
-        <div className="xr-info">
-          <span className="xr-badge">WebXR</span>
-          <span>{NUM_CHANNELS} channels · ±{yScale} µV</span>
-        </div>
+        {vrSupported && !inVR && (
+          <button
+            className="btn xr-enter-vr-btn"
+            onClick={enterVR}
+          >
+            ▶ Enter VR
+          </button>
+        )}
+        {inVR && <span className="xr-badge xr-badge--vr">VR Active</span>}
       </div>
     </div>
   );
