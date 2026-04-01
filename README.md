@@ -44,6 +44,7 @@ curl -sSL https://raw.githubusercontent.com/pieeg-club/PiEEG-server/main/install
 - **Systemd service** — auto-starts on boot via the install script; standard `systemctl` management
 - **Zero-dependency GPIO** — direct Linux chardev v1 ioctl (no `gpiod` package); stable ABI since Linux 4.8
 - **Spike rejection** — auto-resets after sustained electrode contact changes
+- **Webhooks** — configurable HTTP callbacks triggered by EEG events (band power thresholds, amplitude, band ratios); rules persisted to JSON on disk; server relays HTTP requests with custom method, headers, and cooldown; disable with `--no-webhooks`
 
 ### Dashboard
 
@@ -59,9 +60,10 @@ curl -sSL https://raw.githubusercontent.com/pieeg-club/PiEEG-server/main/install
 - **AI chat assistant** — bring-your-own-provider side panel (OpenAI, Anthropic, Ollama, Groq, LM Studio, or any OpenAI-compatible endpoint); system prompt auto-includes live band powers and channel context; SSE streaming responses
 - **Session library** — browse, open, and replay saved recordings with play/pause, seek, and speed control (0.5×–2×); add/delete annotations during playback
 - **Performance monitor** — toggle overlay showing FPS, frame time, and JS heap usage
-- **Keyboard shortcuts** — Space (pause), R (record), F (FFT), G (spectrogram), S (stats), V (3D view), C (chat), P (perf monitor), ? (shortcut help)
+- **Keyboard shortcuts** — Space (pause), R (record), F (FFT), G (spectrogram), S (stats), V (3D view), C (chat), W (webhooks), P (perf monitor), ? (shortcut help)
 - **Update banner** — notifies when a newer version is available with platform-appropriate upgrade instructions
 - **Responsive auth gate** — 6-digit code entry screen when `--auth` is enabled; 24-hour session persistence
+- **Webhook panel** — create rules that fire HTTP requests when EEG conditions are met (e.g. alpha power above threshold); browser-side FFT evaluation (no extra load on the Pi); supports POST/PUT/PATCH/GET methods, Authorization headers, and per-rule cooldown; enable/disable toggle works even when the panel is closed; active indicator dot on the toolbar; contextual `?` tooltips on every field
 
 ## Install
 
@@ -297,6 +299,7 @@ Server options:
   --record-duration SEC  Stop recording after N seconds
   --monitor              Show live terminal monitor alongside server
   --mock                 Synthetic EEG data (no hardware needed)
+  --no-webhooks          Disable the webhook system
   -v, --verbose          Debug logging
 ```
 
@@ -308,6 +311,21 @@ Clients can send JSON commands over the WebSocket:
 {"cmd": "set_filter", "enabled": true, "lowcut": 1.0, "highcut": 40.0}
 {"cmd": "set_filter", "enabled": false}
 ```
+
+### Webhook commands
+
+Webhook rules are managed via WebSocket commands. The dashboard handles this automatically, but custom clients can use these directly:
+
+```json
+{"cmd": "webhook_list"}
+{"cmd": "webhook_create", "rule": {"name": "Alpha alert", "trigger_type": "band_power_above", "params": {"band": "alpha", "threshold": 20}, "url": "https://example.com/hook", "method": "POST", "headers": {"Authorization": "Bearer ..."}, "cooldown": 30}}
+{"cmd": "webhook_update", "rule": {"id": "abc123", "name": "Updated name", "enabled": false}}
+{"cmd": "webhook_delete", "id": "abc123"}
+{"cmd": "webhook_test", "id": "abc123"}
+{"cmd": "webhook_fire", "rule_id": "abc123", "value": 25.3}
+```
+
+Trigger types: `band_power_above`, `band_power_below`, `amplitude_above`, `amplitude_below`, `band_ratio_above`, `band_ratio_below`.
 
 ## Architecture
 
@@ -323,6 +341,7 @@ Clients can send JSON commands over the WebSocket:
 │       ├── recorder.py  → CSV file writer                 │
 │       └── monitor.py   → Terminal sparkline display      │
 │       ↓                                                  │
+│  webhooks.py     → Rules store + HTTP relay              │
 │  dashboard.py    → HTTP server for real-time web UI       │
 │       ↓                                                  │
 │  ws://0.0.0.0:1616  │  http://0.0.0.0:1617              │
