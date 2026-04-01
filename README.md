@@ -10,7 +10,7 @@
 A lightweight server for the [PiEEG](https://github.com/pieeg-club/PiEEG-16) shields (8 or 16 channels) that initializes the hardware, reads EEG at 250 Hz, streams live data over WebSocket, and serves a real-time dashboard — all on your local network.
 
 ```bash
-pip install pieeg-server
+curl -sSL https://raw.githubusercontent.com/pieeg-club/PiEEG-server/main/install.sh | bash
 ```
 
 <p align="left">
@@ -67,13 +67,7 @@ pip install pieeg-server
 
 > Pick **one** method. They all get you to the same place: `pieeg-server` ready to run.
 
-### Option A — pip install (recommended)
-
-```bash
-pip install pieeg-server
-```
-
-### Option B — One-line install
+### Option A — One-line install (recommended)
 
 SSH into your Pi and paste:
 
@@ -82,7 +76,9 @@ curl -sSL https://raw.githubusercontent.com/pieeg-club/PiEEG-server/main/install
 sudo reboot   # only needed first time, to enable SPI
 ```
 
-### Option C — Clone & setup
+This enables SPI, installs dependencies, creates a virtualenv, sets up a systemd service, and verifies everything works.
+
+### Option B — Clone & setup
 
 ```bash
 git clone https://github.com/pieeg-club/PiEEG-server.git
@@ -90,6 +86,15 @@ cd PiEEG-server
 chmod +x setup.sh
 ./setup.sh
 sudo reboot   # only needed first time, to enable SPI
+```
+
+### Option C — pip install (development / mock mode)
+
+For development on a laptop or CI — no hardware setup, no systemd:
+
+```bash
+pip install pieeg-server
+pieeg-server --mock
 ```
 
 ---
