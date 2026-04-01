@@ -75,6 +75,9 @@ export function useEventEngine(
   const detectorsRef = useRef(detectors);
   detectorsRef.current = detectors;
 
+  // Pre-allocated extraction buffers — reused every eval tick to avoid GC
+  const extractBufsRef = useRef<Float64Array[]>([]);
+
   const scanResolveRef = useRef<((evts: EEGEvent[]) => void) | null>(null);
 
   // ── Worker lifecycle ─────────────────────────────────────────────────
@@ -151,13 +154,17 @@ export function useEventEngine(
       const { buffers, writeIndex, samplesInBuffer, numChannels } = eegData;
       if (samplesInBuffer.current < FFT_SIZE) return;
 
-      // Extract last FFT_SIZE samples per channel
+      // Lazily grow the pre-allocated buffer pool to match numChannels
+      const pool = extractBufsRef.current;
+      while (pool.length < numChannels) pool.push(new Float64Array(FFT_SIZE));
+
+      // Copy last FFT_SIZE samples per channel into reusable buffers
       const channelData: Float64Array[] = [];
       for (let ch = 0; ch < numChannels; ch++) {
         const buf = buffers.current[ch];
         const bLen = buf.length;
         const wi = writeIndex.current;
-        const tmp = new Float64Array(FFT_SIZE);
+        const tmp = pool[ch];
         const start = (wi - FFT_SIZE + bLen) % bLen;
         for (let i = 0; i < FFT_SIZE; i++) {
           tmp[i] = buf[(start + i) % bLen];
