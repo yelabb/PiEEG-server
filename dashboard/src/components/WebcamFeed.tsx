@@ -32,7 +32,7 @@ function WebcamHUD({ data }: { data: VideoContextData }) {
 
       // --- Compute labels ---
       const avgEar = (latest.earLeft + latest.earRight) / 2;
-      const eyeLabel = avgEar < 0.21 ? "👁 CLOSED" : "👁 open";
+      const eyeLabel = avgEar < 0.21 ? "👁 CLOSED" : "👁 Open";
 
       // Head movement — average last 10 snapshots
       const tail = snaps.slice(-10);
@@ -52,10 +52,12 @@ function WebcamHUD({ data }: { data: VideoContextData }) {
         (b) => now - b.t < 10_000
       ).length;
 
+      const blinkActive = recentBlink ? ' hud-blink-active' : '';
+
       el.innerHTML =
-        `<span class="hud-row">${eyeLabel}</span>` +
-        `<span class="hud-row">⚡ blinks: ${blinkCount}</span>` +
-        `<span class="hud-row">🗣 head: ${moveLabel}</span>` +
+        `<span class="hud-row${blinkActive}">${eyeLabel}</span>` +
+        `<span class="hud-row${blinkActive}">⚡ ${blinkCount}</span>` +
+        `<span class="hud-row">🗣 ${moveLabel}</span>` +
         `<span class="hud-row">${jawLabel}</span>`;
     }, 100);
 

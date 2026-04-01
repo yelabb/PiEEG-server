@@ -2214,33 +2214,49 @@ body {
 /* Webcam HUD overlay */
 .webcam-hud {
   position: absolute;
-  bottom: 6px;
-  left: 6px;
+  bottom: 0;
+  left: 0;
+  right: 0;
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  padding: 6px 8px;
   font-size: 11px;
   font-family: var(--mono);
   color: #fff;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
   pointer-events: none;
   z-index: 2;
 }
 
 .hud-row {
-  display: block;
+  display: inline-block;
   line-height: 1.4;
+  padding: 1px 5px;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 3px;
 }
 
 .webcam-blink-flash {
   position: absolute;
   inset: 0;
-  background: rgba(255, 255, 100, 0.25);
+  background: radial-gradient(ellipse at center, rgba(255, 220, 50, 0.45) 0%, rgba(255, 180, 0, 0.2) 60%, transparent 100%);
+  border: 2px solid rgba(255, 220, 50, 0.6);
   pointer-events: none;
-  z-index: 1;
+  z-index: 3;
   opacity: 0;
-  transition: opacity 0.08s ease-out;
+  transition: opacity 0.05s ease-in, border-color 0.3s ease-out;
   border-radius: 0;
+}
+
+.webcam-blink-flash[style*="opacity: 1"] ~ .webcam-hud .hud-row:first-child {
+  color: #ffd700;
+}
+
+.hud-blink-active {
+  background: rgba(255, 200, 0, 0.35);
+  color: #ffd700;
 }
 
 /* Chat Messages */
