@@ -60,10 +60,11 @@ curl -sSL https://raw.githubusercontent.com/pieeg-club/PiEEG-server/main/install
 - **AI chat assistant** — bring-your-own-provider side panel (OpenAI, Anthropic, Ollama, Groq, LM Studio, or any OpenAI-compatible endpoint); system prompt auto-includes live band powers and channel context; SSE streaming responses
 - **Session library** — browse, open, and replay saved recordings with play/pause, seek, and speed control (0.5×–2×); add/delete annotations during playback
 - **Performance monitor** — toggle overlay showing FPS, frame time, and JS heap usage
-- **Keyboard shortcuts** — Space (pause), R (record), F (FFT), G (spectrogram), S (stats), V (3D view), C (chat), W (webhooks), P (perf monitor), ? (shortcut help)
+- **Keyboard shortcuts** — Space (pause), R (record), F (FFT), G (spectrogram), S (stats), V (3D view), C (chat), W (webhooks), E (events), P (perf monitor), ? (shortcut help)
 - **Update banner** — notifies when a newer version is available with platform-appropriate upgrade instructions
 - **Responsive auth gate** — 6-digit code entry screen when `--auth` is enabled; 24-hour session persistence
 - **Webhook panel** — create rules that fire HTTP requests when EEG conditions are met (e.g. alpha power above threshold); browser-side FFT evaluation (no extra load on the Pi); supports POST/PUT/PATCH/GET methods, Authorization headers, and per-rule cooldown; enable/disable toggle works even when the panel is closed; active indicator dot on the toolbar; contextual `?` tooltips on every field
+- **Event engine** — 8 auto-detectors (alpha burst, blink artifact, eye movement, band transition, amplitude anomaly, drowsiness onset, focus state, muscle artifact) running off-thread in a Web Worker; data-driven evaluation gated by incoming samples, not a wall-clock timer; scored candidates merged within a 1.5 s window; canvas timeline strip with color-coded badges, hover tooltips, and click-to-seek; side panel with per-detector sensitivity sliders and enable/disable toggles; channel waveform markers (vertical dashed lines + colored badges); full-scan on replay load with event overlay; JSON and CSV export; config persisted to localStorage
 
 ## Install
 
