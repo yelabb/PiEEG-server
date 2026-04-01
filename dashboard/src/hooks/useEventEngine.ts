@@ -17,7 +17,9 @@ import { DEFAULT_DETECTORS, scanRecording } from "../lib/eventDetectors";
 import { mergeCandidates } from "../lib/eventMerger";
 
 const FFT_SIZE = 256;
-const EVAL_INTERVAL_MS = 500; // run detectors every 500 ms
+// Evaluate every EVAL_STRIDE new samples (≈0.5 s at 250 Hz).
+// Driven by actual incoming data, not a wall-clock timer.
+const EVAL_STRIDE = Math.round(SAMPLE_RATE / 2);
 const MAX_EVENTS = 500; // cap timeline size
 
 // ── Persistence helpers ──────────────────────────────────────────────────
@@ -77,6 +79,8 @@ export function useEventEngine(
 
   // Pre-allocated extraction buffers — reused every eval tick to avoid GC
   const extractBufsRef = useRef<Float64Array[]>([]);
+  // Tracks how many total samples had been received at the last eval
+  const lastEvalSampleRef = useRef(0);
 
   const scanResolveRef = useRef<((evts: EEGEvent[]) => void) | null>(null);
 
@@ -143,16 +147,27 @@ export function useEventEngine(
     saveDetectors(detectors);
   }, [detectors]);
 
-  // ── Live evaluation loop ─────────────────────────────────────────────
+  // ── Live evaluation loop (data-driven, not clock-driven) ─────────────
   useEffect(() => {
     if (!enabled || !eegData) return;
 
-    const timer = setInterval(() => {
+    lastEvalSampleRef.current = eegData.samplesInBuffer.current;
+    let rafId = 0;
+
+    const tick = () => {
+      rafId = requestAnimationFrame(tick);
+
       const worker = workerRef.current;
       if (!worker) return;
 
       const { buffers, writeIndex, samplesInBuffer, numChannels } = eegData;
-      if (samplesInBuffer.current < FFT_SIZE) return;
+      const total = samplesInBuffer.current;
+
+      // Only evaluate when EVAL_STRIDE new samples have arrived
+      if (total - lastEvalSampleRef.current < EVAL_STRIDE) return;
+      if (total < FFT_SIZE) return;
+
+      lastEvalSampleRef.current = total;
 
       // Lazily grow the pre-allocated buffer pool to match numChannels
       const pool = extractBufsRef.current;
@@ -172,8 +187,7 @@ export function useEventEngine(
         channelData.push(tmp);
       }
 
-      // Compute approximate frame number from sample count
-      const startFrame = Math.max(0, eegData.samplesInBuffer.current - FFT_SIZE);
+      const startFrame = Math.max(0, total - FFT_SIZE);
 
       worker.postMessage({
         type: "analyse",
@@ -181,9 +195,10 @@ export function useEventEngine(
         startFrame,
         sampleRate: SAMPLE_RATE,
       });
-    }, EVAL_INTERVAL_MS);
+    };
 
-    return () => clearInterval(timer);
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
   }, [enabled, eegData]);
 
   // ── Detector config mutations ────────────────────────────────────────
