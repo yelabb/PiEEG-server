@@ -1,5 +1,5 @@
 import { useRef, useEffect, memo } from "react";
-import type { EEGData, CanvasSize } from "../types";
+import type { EEGData, CanvasSize, EEGEvent } from "../types";
 import { TRACE_COLORS } from "../types";
 
 const GRID_COLOR = "rgba(48,54,61,0.4)";
@@ -102,9 +102,11 @@ interface ChannelCanvasProps {
   expanded?: boolean;
   onToggleExpand: () => void;
   active?: boolean;
+  /** Events to render as markers on this channel. */
+  events?: EEGEvent[];
 }
 
-const ChannelCanvas = memo(function ChannelCanvas({ chIdx, eegData, yRange, expanded, onToggleExpand, active = true }: ChannelCanvasProps) {
+const ChannelCanvas = memo(function ChannelCanvas({ chIdx, eegData, yRange, expanded, onToggleExpand, active = true, events }: ChannelCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef(0);
   const rmsRef = useRef(0);
@@ -195,6 +197,41 @@ const ChannelCanvas = memo(function ChannelCanvas({ chIdx, eegData, yRange, expa
         TRACE_COLORS[chIdx],
         qualityRef.current,
       );
+
+      // ── Draw event markers ──────────────────────────────────────────
+      if (events && events.length > 0) {
+        const count = eegData.samplesInBuffer.current;
+        const bSize = eegData.bufferSize;
+        const xScale = w / (bSize - 1);
+        for (const evt of events) {
+          // Map event frame to canvas x position
+          // For live: events are relative to recent buffer
+          const age = count - (evt.startFrame % bSize);
+          if (age < 0 || age > bSize) continue;
+          const x = (count - age) * xScale;
+          // Vertical line
+          ctx.strokeStyle = evt.color + "80";
+          ctx.lineWidth = 1;
+          ctx.setLineDash([3, 2]);
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, h);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          // Badge
+          const badgeW = 16;
+          const badgeH = 14;
+          ctx.fillStyle = evt.color;
+          ctx.beginPath();
+          ctx.roundRect(x - badgeW / 2, 1, badgeW, badgeH, 3);
+          ctx.fill();
+          ctx.fillStyle = "#000";
+          ctx.font = "9px sans-serif";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(evt.icon, x, 1 + badgeH / 2);
+        }
+      }
 
       rmsFrameRef.current++;
       if (rms !== undefined && (rmsFrameRef.current & 1) === 0) {

@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef, useCallback, type ChangeEvent, type KeyboardEvent } from "react";
 import { NUM_CHANNELS, SAMPLE_RATE, TRACE_COLORS } from "../types";
-import type { Annotation } from "../types";
+import type { Annotation, EEGEvent } from "../types";
+import { useEventEngine } from "../hooks/useEventEngine";
+import EventTimeline from "./EventTimeline";
+import EventPanel from "./EventPanel";
 
 const GRID_COLOR = "rgba(48,54,61,0.4)";
 const ZERO_COLOR = "rgba(88,166,255,0.12)";
@@ -41,6 +44,10 @@ export default function SessionViewer({ filename, onBack }: SessionViewerProps) 
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [annotationInput, setAnnotationInput] = useState("");
   const [showAnnotationForm, setShowAnnotationForm] = useState(false);
+  const [showEvents, setShowEvents] = useState(false);
+  const [eventsEnabled, setEventsEnabled] = useState(true);
+
+  const eventEngine = useEventEngine(eventsEnabled, null);
 
   const channelDataRef = useRef<Float32Array[] | null>(null);
   const totalFramesRef = useRef(0);
@@ -111,6 +118,20 @@ export default function SessionViewer({ filename, onBack }: SessionViewerProps) 
       .then((j) => setAnnotations(j.annotations || []))
       .catch(() => {});
   }, [filename]);
+
+  // Auto-scan recording for events once loaded
+  useEffect(() => {
+    if (loading || error || !channelDataRef.current || !eventsEnabled) return;
+    const data = channelDataRef.current;
+    const total = totalFramesRef.current;
+    // Convert Float32Array to Float64Array for the engine
+    const f64Data = data.map((ch) => {
+      const f64 = new Float64Array(ch.length);
+      for (let i = 0; i < ch.length; i++) f64[i] = ch[i];
+      return f64;
+    });
+    eventEngine.scanRecording(f64Data, total);
+  }, [loading, error, eventsEnabled]);
 
   // Playback + rendering loop
   useEffect(() => {
@@ -231,6 +252,45 @@ export default function SessionViewer({ filename, onBack }: SessionViewerProps) 
     ctx.lineTo(cursorX, h);
     ctx.stroke();
     ctx.setLineDash([]);
+
+    // Draw event markers
+    const evts = eventEngine.events;
+    if (evts.length > 0) {
+      const count = endSample - startSample;
+      for (const evt of evts) {
+        if (evt.endFrame < startSample || evt.startFrame > endSample) continue;
+        const x1 = Math.max(0, ((evt.startFrame - startSample) / count) * w);
+        const x2 = Math.min(w, ((evt.endFrame - startSample) / count) * w);
+        const evtW = Math.max(4, x2 - x1);
+
+        // Highlight region
+        ctx.fillStyle = evt.color + "15";
+        ctx.fillRect(x1, 0, evtW, h);
+
+        // Vertical line at start
+        ctx.strokeStyle = evt.color + "60";
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 2]);
+        ctx.beginPath();
+        ctx.moveTo(x1, 0);
+        ctx.lineTo(x1, h);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Badge at top
+        ctx.fillStyle = evt.color;
+        const badgeW = 16;
+        const badgeH = 14;
+        ctx.beginPath();
+        ctx.roundRect(x1 - 1, 2, badgeW, badgeH, 3);
+        ctx.fill();
+        ctx.fillStyle = "#000";
+        ctx.font = "9px sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(evt.icon, x1 - 1 + badgeW / 2, 2 + badgeH / 2);
+      }
+    }
 
     ctx.fillStyle = "rgba(230,237,243,0.3)";
     ctx.font = "10px monospace";
@@ -440,6 +500,14 @@ export default function SessionViewer({ filename, onBack }: SessionViewerProps) 
           <button className="sv-btn sv-btn-export" onClick={exportJSON} title="Export session metadata + annotations as JSON">
             ⬇ JSON
           </button>
+          <div className="sv-sep" />
+          <button
+            className={`sv-btn${showEvents ? " active" : ""}`}
+            onClick={() => setShowEvents((v) => !v)}
+            title="Event detection engine"
+          >
+            ⚡ Events{eventEngine.scanning ? " …" : eventEngine.events.length > 0 ? ` (${eventEngine.events.length})` : ""}
+          </button>
         </div>
       </header>
 
@@ -524,6 +592,52 @@ export default function SessionViewer({ filename, onBack }: SessionViewerProps) 
           </div>
         </div>
       </div>
+
+      {/* Event Timeline strip (replay mode) */}
+      {eventEngine.events.length > 0 && (
+        <EventTimeline
+          events={eventEngine.events}
+          totalDuration={totalDuration}
+          currentTime={currentTime}
+          live={false}
+          onEventClick={(evt) => {
+            setCurrentFrame(evt.startFrame);
+            currentFrameRef.current = evt.startFrame;
+            setPlaying(false);
+            lastTimeRef.current = 0;
+            setShowEvents(true);
+          }}
+          onSeek={(timeS) => {
+            const frame = Math.floor(timeS * SAMPLE_RATE);
+            setCurrentFrame(frame);
+            currentFrameRef.current = frame;
+            setPlaying(false);
+            lastTimeRef.current = 0;
+          }}
+        />
+      )}
+
+      {/* Event Panel sidebar */}
+      <EventPanel
+        open={showEvents}
+        onClose={() => setShowEvents(false)}
+        events={eventEngine.events}
+        detectors={eventEngine.detectors}
+        enabled={eventsEnabled}
+        onToggleEnabled={() => setEventsEnabled((v) => !v)}
+        onSetDetectorEnabled={eventEngine.setDetectorEnabled}
+        onSetDetectorSensitivity={eventEngine.setDetectorSensitivity}
+        onResetDetectors={eventEngine.resetDetectors}
+        onClearEvents={eventEngine.clearEvents}
+        onEventClick={(evt) => {
+          setCurrentFrame(evt.startFrame);
+          currentFrameRef.current = evt.startFrame;
+          setPlaying(false);
+          lastTimeRef.current = 0;
+        }}
+        channelData={channelDataRef.current}
+        totalFrames={totalFrames}
+      />
 
       <style>{styles}</style>
     </div>

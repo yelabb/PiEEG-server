@@ -240,3 +240,80 @@ export interface SelectOption<T> {
   value: T;
   label: string;
 }
+
+// ── Event Engine types ───────────────────────────────────────────────────
+
+export const EVENT_DETECTOR_TYPES = [
+  "alpha_burst",
+  "blink_artifact",
+  "eye_movement",
+  "band_transition",
+  "amplitude_anomaly",
+  "drowsiness_onset",
+  "focus_state",
+  "muscle_artifact",
+] as const;
+
+export type EventDetectorType = (typeof EVENT_DETECTOR_TYPES)[number];
+
+export interface DetectorConfig {
+  type: EventDetectorType;
+  label: string;
+  description: string;
+  color: string;
+  icon: string;
+  enabled: boolean;
+  sensitivity: number; // 0–1 (maps to internal thresholds)
+  defaultSensitivity: number;
+}
+
+/** A scored candidate moment before merge. */
+export interface EventCandidate {
+  detector: EventDetectorType;
+  /** Time in seconds (stream-relative for live, absolute for replay). */
+  time: number;
+  /** Frame index (sample number). */
+  frame: number;
+  /** Confidence score 0–1. */
+  score: number;
+  /** Channel(s) most relevant, or null for global events. */
+  channels: number[] | null;
+  /** Feature values that triggered detection. */
+  features: Record<string, number>;
+}
+
+/** A merged event (candidates within a merge window are combined). */
+export interface EEGEvent {
+  id: string;
+  detector: EventDetectorType;
+  label: string;
+  color: string;
+  icon: string;
+  /** Start time in seconds. */
+  startTime: number;
+  /** End time in seconds (same as start for instantaneous). */
+  endTime: number;
+  /** Start frame index. */
+  startFrame: number;
+  /** End frame index. */
+  endFrame: number;
+  /** Peak score across merged candidates. */
+  score: number;
+  /** Channels involved. */
+  channels: number[] | null;
+  /** Feature snapshot at peak score. */
+  features: Record<string, number>;
+  /** Human-readable explanation. */
+  explanation: string;
+}
+
+/** Message sent TO the event engine worker. */
+export type EventWorkerInMessage =
+  | { type: "configure"; detectors: DetectorConfig[] }
+  | { type: "analyse"; channelData: Float64Array[]; startFrame: number; sampleRate: number }
+  | { type: "scan"; channelData: Float64Array[]; totalFrames: number; sampleRate: number };
+
+/** Message sent FROM the event engine worker. */
+export type EventWorkerOutMessage =
+  | { type: "candidates"; candidates: EventCandidate[] }
+  | { type: "scan_complete"; events: EEGEvent[] };

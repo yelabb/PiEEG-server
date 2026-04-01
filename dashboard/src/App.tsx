@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, type ChangeEvent } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo, type ChangeEvent } from "react";
 import { useEEG } from "./hooks/useEEG";
 import AuthGate from "./components/AuthGate";
 import ChannelCanvas from "./components/ChannelCanvas";
@@ -16,10 +16,13 @@ import UpdateBanner from "./components/UpdateBanner";
 import ShortcutHelp from "./components/ShortcutHelp";
 import ChatPanel from "./components/ChatPanel";
 import WebhookPanel from "./components/WebhookPanel";
+import EventTimeline from "./components/EventTimeline";
+import EventPanel from "./components/EventPanel";
 import { useWebhooks } from "./hooks/useWebhooks";
+import { useEventEngine } from "./hooks/useEventEngine";
 import ErrorBoundary from "./components/ErrorBoundary";
-import { NUM_CHANNELS } from "./types";
-import type { SelectOption } from "./types";
+import { NUM_CHANNELS, SAMPLE_RATE } from "./types";
+import type { SelectOption, EEGEvent } from "./types";
 
 const DEFAULT_MOBILE = new Set([0, 1, 2, 3]);
 
@@ -55,6 +58,10 @@ export default function App() {
   const [showStats, setShowStats] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [showWebhooks, setShowWebhooks] = useState(false);
+  const [showEvents, setShowEvents] = useState(false);
+  const [eventsEnabled, setEventsEnabled] = useState(
+    () => localStorage.getItem("pieeg_events_enabled") === "true"
+  );
   const [webhooksEnabled, setWebhooksEnabled] = useState(
     () => localStorage.getItem("pieeg_webhooks_enabled") === "true"
   );
@@ -69,7 +76,37 @@ export default function App() {
     });
   }, []);
 
+  const toggleEventsEnabled = useCallback(() => {
+    setEventsEnabled((prev) => {
+      const next = !prev;
+      localStorage.setItem("pieeg_events_enabled", String(next));
+      return next;
+    });
+  }, []);
+
   const webhooks = useWebhooks(webhooksEnabled, eeg.data, eeg.sendCommand);
+  const eventEngine = useEventEngine(eventsEnabled, eeg.data);
+
+  // Compute elapsed live time for timeline
+  const liveElapsedRef = useRef(0);
+  useEffect(() => {
+    if (!eeg.connected) { liveElapsedRef.current = 0; return; }
+    liveElapsedRef.current = eeg.sampleCount / SAMPLE_RATE;
+  });
+
+  // Memoize per-channel event lists to avoid re-filtering every render
+  const eventsByChannel = useMemo(() => {
+    const map = new Map<number, EEGEvent[]>();
+    for (const evt of eventEngine.events) {
+      if (!evt.channels) continue;
+      for (const ch of evt.channels) {
+        const arr = map.get(ch) ?? [];
+        arr.push(evt);
+        map.set(ch, arr);
+      }
+    }
+    return map;
+  }, [eventEngine.events]);
 
   const allChannels = new Set(Array.from({ length: numCh }, (_, i) => i));
 
@@ -188,6 +225,9 @@ export default function App() {
           break;
         case "KeyW":
           setShowWebhooks((v) => !v);
+          break;
+        case "KeyE":
+          setShowEvents((v) => !v);
           break;
         case "KeyG":
           setShowSpectrogram((v) => !v);
@@ -322,6 +362,12 @@ export default function App() {
           Webhooks{webhooksEnabled && <span className="wh-active-dot" />}
         </button>
         <button
+          className={`btn${showEvents ? " active" : ""}`}
+          onClick={() => setShowEvents((v) => !v)}
+        >
+          Events{eventsEnabled && <span className="wh-active-dot" />}
+        </button>
+        <button
           className="btn btn-xr"
           onClick={() => setXrActive(true)}
           title="Open EEG waves in immersive 3D / VR"
@@ -427,9 +473,20 @@ export default function App() {
               yRange={yScale}
               active={activeChannels.has(i)}
               onToggleExpand={() => toggleExpandCh(i)}
+              events={eventsEnabled ? eventsByChannel.get(i) : undefined}
             />
           ))}
         </div>
+        {/* Event timeline strip */}
+        {eventsEnabled && eventEngine.events.length > 0 && (
+          <EventTimeline
+            events={eventEngine.events}
+            totalDuration={liveElapsedRef.current || 60}
+            currentTime={null}
+            live={true}
+            onEventClick={(evt) => { setShowEvents(true); }}
+          />
+        )}
         {showFFT && (
           <div className="fft-area">
             <SpectralPanel eegData={eeg.data} />
@@ -526,6 +583,20 @@ export default function App() {
         onToggleEnabled={toggleWebhooksEnabled}
       />
 
+      {/* Event Engine side panel */}
+      <EventPanel
+        open={showEvents}
+        onClose={() => setShowEvents(false)}
+        events={eventEngine.events}
+        detectors={eventEngine.detectors}
+        enabled={eventsEnabled}
+        onToggleEnabled={toggleEventsEnabled}
+        onSetDetectorEnabled={eventEngine.setDetectorEnabled}
+        onSetDetectorSensitivity={eventEngine.setDetectorSensitivity}
+        onResetDetectors={eventEngine.resetDetectors}
+        onClearEvents={eventEngine.clearEvents}
+      />
+
       {/* Keyboard shortcut help (press ? to toggle) */}
       <ShortcutHelp />
 
@@ -541,6 +612,7 @@ export default function App() {
           <kbd>V</kbd> XR
           <kbd>C</kbd> Chat
           <kbd>W</kbd> Hooks
+          <kbd>E</kbd> Events
           <kbd>Esc</kbd> Close
           <kbd>P</kbd> Perf
         </span>
