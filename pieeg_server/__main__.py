@@ -208,6 +208,26 @@ def parse_args():
         "--monitor", action="store_true",
         help="Show live terminal monitor (requires 'rich')",
     )
+    p.add_argument(
+        "--osc", action="store_true",
+        help="Enable VRChat OSC bridge on startup (sends EEG band powers via UDP)",
+    )
+    p.add_argument(
+        "--osc-host", default="127.0.0.1", metavar="HOST",
+        help="VRChat OSC host (default: 127.0.0.1)",
+    )
+    p.add_argument(
+        "--osc-port", type=int, default=9000, metavar="PORT",
+        help="VRChat OSC UDP port (default: 9000)",
+    )
+    p.add_argument(
+        "--osc-mode", default="both", choices=["chatbox", "parameters", "both"],
+        help="OSC output mode: chatbox text, avatar parameters, or both (default: both)",
+    )
+    p.add_argument(
+        "--osc-interval", type=float, default=0.25, metavar="SEC",
+        help="Seconds between OSC sends (default: 0.25 = 4 Hz)",
+    )
     return p.parse_args()
 
 
@@ -354,6 +374,21 @@ def main():
     if not getattr(args, 'no_webhooks', False):
         server.enable_webhooks()
         logger.info("Webhooks enabled")
+
+    # --- VRChat OSC bridge (optional, auto-starts with --osc) ---
+    if getattr(args, 'osc', False):
+        from .osc_vrchat import OSCConfig, VRChatOSCBridge  # noqa: F401
+        osc_cfg = OSCConfig(
+            host=args.osc_host,
+            port=args.osc_port,
+            mode=args.osc_mode,
+            interval=args.osc_interval,
+        )
+        server.enable_osc(osc_cfg)
+        logger.info(
+            "VRChat OSC bridge configured: %s:%d  mode=%s  interval=%.2fs",
+            args.osc_host, args.osc_port, args.osc_mode, args.osc_interval,
+        )
 
     # --- Dashboard ---
     dashboard = None

@@ -158,6 +158,12 @@ export function useEEG(timeWindowSec = 4): UseEEGReturn {
           if (typeof handler === "function") handler(msg);
         }
 
+        // Forward VRChat OSC status to experience handler
+        if ("osc_status" in msg) {
+          const handler = (window as unknown as Record<string, unknown>).__oscHandler;
+          if (typeof handler === "function") handler(msg);
+        }
+
         if ("status" in msg) {
           // Welcome message — read channel count from server
           const serverCh = (msg as Record<string, unknown>).channels;

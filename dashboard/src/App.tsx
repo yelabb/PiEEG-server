@@ -280,6 +280,7 @@ export default function App() {
             eegData={eeg.data}
             yScale={yScale}
             onBack={() => setView("live")}
+            sendCommand={eeg.sendCommand}
           />
         </ErrorBoundary>
       </AuthGate>

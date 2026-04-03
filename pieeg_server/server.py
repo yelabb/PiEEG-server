@@ -28,6 +28,7 @@ from .auth import AuthManager
 from .filters import MultichannelFilter
 from .recorder import Recorder
 from .webhooks import WebhookStore
+from .osc_vrchat import VRChatOSCBridge, OSCConfig
 
 logger = logging.getLogger("pieeg.server")
 
@@ -55,6 +56,8 @@ class PiEEGServer:
         self._record_start_time: float | None = None
         self._recordings_dir = Path("recordings")
         self._webhooks: WebhookStore | None = None
+        self._osc_bridge: VRChatOSCBridge | None = None
+        self._osc_task: asyncio.Task | None = None
 
     def enable_filter(self, lowcut: float = 1.0, highcut: float = 40.0):
         self._filter = MultichannelFilter(
@@ -63,6 +66,17 @@ class PiEEGServer:
 
     def disable_filter(self):
         self._filter = None
+
+    def enable_osc(self, config: OSCConfig | None = None):
+        """Pre-configure the OSC bridge (does not start it; use osc_start command)."""
+        self._osc_bridge = VRChatOSCBridge(self._acq, config)
+        logger.info("VRChat OSC bridge ready (start via dashboard or --osc flag)")
+
+    async def _osc_autostart(self):
+        """Start the OSC bridge immediately (used with --osc CLI flag)."""
+        if self._osc_bridge and not (self._osc_task and not self._osc_task.done()):
+            self._osc_task = asyncio.create_task(self._osc_bridge.run())
+            await self._broadcast_osc_status()
 
     def enable_webhooks(self, rules_path=None):
         """Create the webhook store (rules + HTTP relay)."""
@@ -82,6 +96,9 @@ class PiEEGServer:
             logger.info(
                 "PiEEG streaming on ws://%s:%d", self._host, self._port
             )
+            # Auto-start OSC bridge if pre-configured (via --osc CLI flag)
+            if self._osc_bridge:
+                await self._osc_autostart()
             await self._broadcast_loop()
 
     async def _handle_client(self, ws: websockets.WebSocketServerProtocol):
@@ -155,6 +172,15 @@ class PiEEGServer:
             await self._ws_webhook_test(ws, msg)
         elif cmd == "webhook_fire":
             await self._ws_webhook_fire(ws, msg)
+        # ── VRChat OSC commands ────────────────────────────────────────────
+        elif cmd == "osc_status":
+            await self._ws_osc_status(ws)
+        elif cmd == "osc_start":
+            await self._ws_osc_start(ws, msg)
+        elif cmd == "osc_stop":
+            await self._ws_osc_stop(ws)
+        elif cmd == "osc_config":
+            await self._ws_osc_config(ws, msg)
 
     async def _start_recording(self):
         """Start recording EEG data to a timestamped CSV file."""
@@ -312,3 +338,71 @@ class PiEEGServer:
             except websockets.ConnectionClosed:
                 stale.add(ws)
         self._clients -= stale
+
+    # ── VRChat OSC WebSocket handlers ─────────────────────────────────────
+
+    async def _ws_osc_status(self, ws):
+        """Send current OSC bridge status to the requesting client."""
+        status = self._osc_bridge.status() if self._osc_bridge else {"running": False}
+        await ws.send(json.dumps({"osc_status": status}))
+
+    async def _ws_osc_start(self, ws, msg: dict):
+        """Start (or restart) the OSC bridge with optional config."""
+        # Apply config patch before starting, if provided
+        config_patch = msg.get("config", {})
+
+        if not self._osc_bridge:
+            cfg = OSCConfig.from_dict(config_patch) if config_patch else OSCConfig()
+            self._osc_bridge = VRChatOSCBridge(self._acq, cfg)
+        elif config_patch:
+            self._osc_bridge.update_config(config_patch)
+
+        # Stop existing task if running
+        if self._osc_task and not self._osc_task.done():
+            self._osc_bridge.stop()
+            try:
+                await asyncio.wait_for(self._osc_task, timeout=2.0)
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                pass
+
+        self._osc_task = asyncio.create_task(self._osc_bridge.run())
+        # Yield once so run() can execute its first line (self._running = True)
+        # before we read status() for the broadcast — otherwise the broadcast
+        # would still report running=False.
+        await asyncio.sleep(0)
+        logger.info("VRChat OSC bridge started via WebSocket command")
+        await self._broadcast_osc_status()
+
+    async def _ws_osc_stop(self, ws):
+        """Stop the OSC bridge."""
+        if self._osc_bridge and self._osc_task and not self._osc_task.done():
+            self._osc_bridge.stop()
+            try:
+                await asyncio.wait_for(self._osc_task, timeout=2.0)
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                pass
+            logger.info("VRChat OSC bridge stopped via WebSocket command")
+        await self._broadcast_osc_status()
+
+    async def _ws_osc_config(self, ws, msg: dict):
+        """Update OSC config while running (hot-reload)."""
+        config_patch = msg.get("config", {})
+        if not self._osc_bridge:
+            cfg = OSCConfig.from_dict(config_patch)
+            self._osc_bridge = VRChatOSCBridge(self._acq, cfg)
+        else:
+            self._osc_bridge.update_config(config_patch)
+        await ws.send(json.dumps({"osc_status": self._osc_bridge.status()}))
+
+    async def _broadcast_osc_status(self):
+        """Push current OSC status to all connected clients."""
+        status = self._osc_bridge.status() if self._osc_bridge else {"running": False}
+        payload = json.dumps({"osc_status": status})
+        stale = set()
+        for ws in list(self._clients):
+            try:
+                await ws.send(payload)
+            except websockets.ConnectionClosed:
+                stale.add(ws)
+        self._clients -= stale
+

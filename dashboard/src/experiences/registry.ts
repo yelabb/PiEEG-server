@@ -15,6 +15,8 @@ export interface ExperienceProps {
   eegData: EEGData;
   yScale: number;
   onExit: () => void;
+  /** Optional: send a command to the pieeg-server WebSocket. */
+  sendCommand?: (cmd: Record<string, unknown>) => void;
 }
 
 export interface ExperienceEntry {
@@ -44,6 +46,9 @@ const BlinkBrowserExperience = lazy(
 );
 const NeuralSonificationExperience = lazy(
   () => import("./neural-sonification/NeuralSonification"),
+);
+const VRChatOSCExperience = lazy(
+  () => import("./vrchat-osc/VRChatOSC"),
 );
 
 export const EXPERIENCES: ExperienceEntry[] = [
@@ -77,6 +82,16 @@ export const EXPERIENCES: ExperienceEntry[] = [
     tag: "Audio",
     gradient: ["#f59e0b", "#ef4444"],
     component: NeuralSonificationExperience,
+    author: "PiEEG community",
+  },
+  {
+    id: "vrchat-osc",
+    name: "VRChat OSC Bridge",
+    description:
+      "Stream live EEG band powers into VRChat via OSC UDP. Show your mental state in the chatbox bubble above your avatar's head, or drive avatar expressions and animations with normalised band-power float parameters.",
+    tag: "VRChat",
+    gradient: ["#1565c0", "#6a1b9a"],
+    component: VRChatOSCExperience,
     author: "PiEEG community",
   },
 ];

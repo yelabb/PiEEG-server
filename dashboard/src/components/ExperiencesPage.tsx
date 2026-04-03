@@ -6,9 +6,10 @@ interface ExperiencesPageProps {
   eegData: EEGData;
   yScale: number;
   onBack: () => void;
+  sendCommand?: (cmd: Record<string, unknown>) => void;
 }
 
-export default function ExperiencesPage({ eegData, yScale, onBack }: ExperiencesPageProps) {
+export default function ExperiencesPage({ eegData, yScale, onBack, sendCommand }: ExperiencesPageProps) {
   const [active, setActive] = useState<ExperienceEntry | null>(null);
 
   // Running an experience — render it full-screen
@@ -23,7 +24,7 @@ export default function ExperiencesPage({ eegData, yScale, onBack }: Experiences
           </div>
         }
       >
-        <Comp eegData={eegData} yScale={yScale} onExit={() => setActive(null)} />
+        <Comp eegData={eegData} yScale={yScale} onExit={() => setActive(null)} sendCommand={sendCommand} />
       </Suspense>
     );
   }
