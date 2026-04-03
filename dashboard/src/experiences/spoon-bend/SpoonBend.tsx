@@ -1,51 +1,45 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Spoon Bend — "There is no spoon" / Matrix-inspired focus experience.
+// Spoon Bend — "There is no spoon" / Matrix-inspired 3D focus experience.
 //
-// The user concentrates to bend a virtual spoon using brainwaves.
-// Beta + Gamma power (focus/attention) drives the bend amount while
-// a Matrix-style digital rain falls in the background.
+// Three.js procedural spoon with metallic PBR material + env-map reflections.
+// Beta + Gamma power (focus/attention) drives the bend amount while a
+// Matrix-style digital rain falls over the 3D scene.
 //
 // Focus metric: (Beta + Gamma) / (Alpha + Theta + Delta)
-// Higher ratio → more concentration → more bend.
 //
 // Controls:
-//   Space — toggle calibration baseline
+//   Space — calibrate baseline
 //   R     — reset calibration
 //   Esc   — exit
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import * as THREE from "three";
+import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
 import type { ExperienceProps } from "../registry";
 import { FftEngine, FREQUENCY_BANDS } from "../../lib/fftEngine";
 import type { BandPowers } from "../../types";
+import spoonObjUrl from "./spoon.obj?url";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const SAMPLE_RATE = 250;
 const FFT_SIZE = 256;
 const FFT_ENGINE = new FftEngine(FFT_SIZE, SAMPLE_RATE);
-
-/** How many frames between FFT updates (perf: skip every other). */
 const FFT_EVERY_N_FRAMES = 2;
-
-/** Smoothing factor for the focus metric (0 = no smoothing, 1 = frozen). */
 const SMOOTH = 0.88;
+const RAIN_COLS = 60;
 
-/** Maximum bend angle in degrees. */
-const MAX_BEND_DEG = 75;
+// ── Matrix rain ──────────────────────────────────────────────────────────────
 
-/** Matrix rain — number of columns. */
-const RAIN_COLS = 48;
-
-// ── Matrix rain state ────────────────────────────────────────────────────────
+const MATRIX_CHARS =
+  "ﾊﾐﾋｰｳｼﾅﾓﾆｻﾜﾂｵﾘｱﾎﾃﾏｹﾒｴｶｷﾑﾕﾗｾﾈｽﾀﾇﾍ012345789ZΞΨΩΦ:・.=*+-<>¦╌";
 
 interface RainDrop {
   y: number;
   speed: number;
   chars: string[];
 }
-
-const MATRIX_CHARS = "ﾊﾐﾋｰｳｼﾅﾓﾆｻﾜﾂｵﾘｱﾎﾃﾏｹﾒｴｶｷﾑﾕﾗｾﾈｽﾀﾇﾍ012345789ZΞΨΩΦ:・.\"=*+-<>¦╌";
 
 function randomChar(): string {
   return MATRIX_CHARS[Math.floor(Math.random() * MATRIX_CHARS.length)];
@@ -55,80 +49,108 @@ function createDrops(cols: number): RainDrop[] {
   return Array.from({ length: cols }, () => ({
     y: Math.random() * -50,
     speed: 0.5 + Math.random() * 2,
-    chars: Array.from({ length: 20 }, randomChar),
+    chars: Array.from({ length: 22 }, randomChar),
   }));
 }
 
-// ── Spoon path generation ────────────────────────────────────────────────────
+// ── Spoon model ──────────────────────────────────────────────────────────────
+// The OBJ model lies along Z (bowl at −Z, handle tip at +Z).
+// ~0.43 wide (X), ~0.11 tall (Y), ~1.85 long (Z).
+// We bend the handle half (positive Z) using vertex deformation.
+
+const SPOON_MATERIAL = new THREE.MeshPhysicalMaterial({
+  color: 0xd8d8de,
+  metalness: 1.0,
+  roughness: 0.08,
+  reflectivity: 1.0,
+  clearcoat: 0.3,
+  clearcoatRoughness: 0.05,
+  envMapIntensity: 2.0,
+  side: THREE.DoubleSide,
+});
 
 /**
- * Returns an array of {x, y} points tracing a spoon outline.
- * `bend` is 0..1 — how much to curve the handle.
+ * Apply a smooth bend to vertex positions along Z.
+ * `bendAmount` is 0–1 (0 = straight, 1 = full bend).
+ * Bends the TOP of the spoon (negative Z / bowl side).
  */
-function spoonPoints(
-  cx: number,
-  cy: number,
-  size: number,
-  bend: number,
-): { x: number; y: number }[] {
-  const pts: { x: number; y: number }[] = [];
-  const bowlW = size * 0.32;
-  const bowlH = size * 0.22;
-  const handleLen = size * 0.58;
-  const handleW = size * 0.055;
+function applyBend(
+  positions: THREE.BufferAttribute,
+  originals: Float32Array,
+  bendStart: number,
+  bendEnd: number,
+  bendAmount: number,
+) {
+  const maxAngle = bendAmount * (80 * Math.PI) / 180; // up to 80°
+  const range = bendStart - bendEnd; // bendEnd < bendStart (negative Z)
+  const count = positions.count;
 
-  // Bowl — ellipse at top
-  const bowlCY = cy - size * 0.28;
-  for (let a = 0; a <= Math.PI * 2; a += 0.15) {
-    pts.push({
-      x: cx + Math.cos(a) * bowlW,
-      y: bowlCY + Math.sin(a) * bowlH,
-    });
+  for (let i = 0; i < count; i++) {
+    const ox = originals[i * 3];
+    const oy = originals[i * 3 + 1];
+    const oz = originals[i * 3 + 2];
+
+    if (oz >= bendStart) {
+      positions.setXYZ(i, ox, oy, oz);
+      continue;
+    }
+
+    // t: 0 at bendStart, 1 at bendEnd (into negative Z)
+    const t = Math.min(1, (bendStart - oz) / range);
+    const angle = maxAngle * t * t; // quadratic ease
+
+    // Rotate the segment around the bend origin
+    const dz = bendStart - oz;
+    const newZ = bendStart - Math.cos(angle) * dz;
+    const newY = oy + Math.sin(angle) * dz;
+
+    positions.setXYZ(i, ox, newY, newZ);
   }
 
-  // Neck narrowing
-  const neckY = bowlCY + bowlH;
-  pts.push({ x: cx - handleW * 1.8, y: neckY });
-  pts.push({ x: cx + handleW * 1.8, y: neckY });
+  positions.needsUpdate = true;
+}
 
-  // Handle — bends via quadratic offset
-  const handleStartY = neckY + size * 0.02;
-  const handleEndY = handleStartY + handleLen;
-  const bendOffset = bend * size * 0.55; // max lateral pixel shift
+// ── Procedural env-map for reflections ───────────────────────────────────────
 
-  const steps = 24;
-  // Right edge going down
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    const y = handleStartY + t * handleLen;
-    // Quadratic bend curve, peak at t≈0.6
-    const curve = bendOffset * Math.sin(t * Math.PI * 0.9);
-    pts.push({ x: cx + handleW + curve, y });
-  }
-  // Left edge going up
-  for (let i = steps; i >= 0; i--) {
-    const t = i / steps;
-    const y = handleStartY + t * handleLen;
-    const curve = bendOffset * Math.sin(t * Math.PI * 0.9);
-    pts.push({ x: cx - handleW + curve, y });
+function createEnvMap(): THREE.Texture {
+  const size = 512;
+  const data = new Uint8Array(size * size * 4);
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const i = (y * size + x) * 4;
+      const t = y / size;
+      const u = x / size;
+      // Richer gradient: cool highlights top, warm bottom, bright centre band
+      const band = Math.exp(-((t - 0.35) * (t - 0.35)) / 0.02) * 80;
+      data[i] = Math.min(255, Math.floor(15 + t * 50 + band * 0.6));
+      data[i + 1] = Math.min(255, Math.floor(25 + t * 90 + band + Math.sin(u * 12) * 10));
+      data[i + 2] = Math.min(255, Math.floor(35 + t * 70 + band * 0.8));
+      data[i + 3] = 255;
+    }
   }
 
-  return pts;
+  const tex = new THREE.DataTexture(data, size, size, THREE.RGBAFormat);
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  tex.needsUpdate = true;
+  return tex;
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
 
-export default function SpoonBend({
-  eegData,
-  onExit,
-}: ExperienceProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+export default function SpoonBend({ eegData, onExit }: ExperienceProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const overlayRef = useRef<HTMLCanvasElement>(null);
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const rafRef = useRef(0);
   const frameRef = useRef(0);
-  const focusRef = useRef(0); // smoothed focus 0–1
+  const focusRef = useRef(0);
   const baselineRef = useRef<number | null>(null);
   const baselineSamples = useRef<number[]>([]);
   const dropsRef = useRef<RainDrop[]>(createDrops(RAIN_COLS));
+  const spoonGroupRef = useRef<THREE.Group | null>(null);
+  const origPositionsRef = useRef<Map<THREE.BufferGeometry, Float32Array>>(new Map());
+  const cleanedUpRef = useRef(false);
 
   const [calibrating, setCalibrating] = useState(false);
   const [focus, setFocus] = useState(0);
@@ -178,36 +200,150 @@ export default function SpoonBend({
     return () => window.removeEventListener("keydown", onKey);
   }, [onExit, startCalibration, resetCalibration]);
 
-  // ── Render loop ───────────────────────────────────────────────────
+  // ── Three.js scene + render loop ──────────────────────────────────
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    const container = containerRef.current;
+    const overlay = overlayRef.current;
+    if (!container || !overlay) return;
+    cleanedUpRef.current = false;
 
+    // Renderer
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.2;
+    container.prepend(renderer.domElement);
+    renderer.domElement.style.cssText =
+      "position:absolute;inset:0;width:100%;height:100%;display:block;";
+    rendererRef.current = renderer;
+
+    // Scene
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x050505);
+
+    const envMap = createEnvMap();
+    scene.environment = envMap;
+
+    // Camera — centred on the spoon
+    const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 50);
+    camera.position.set(0, 0, 3);
+    camera.lookAt(0, 0, 0);
+
+    // Lights
+    scene.add(new THREE.AmbientLight(0x112211, 0.6));
+
+    const keyLight = new THREE.DirectionalLight(0xffffff, 1.8);
+    keyLight.position.set(2, 3, 4);
+    scene.add(keyLight);
+
+    const fillLight = new THREE.DirectionalLight(0x88ccff, 0.6);
+    fillLight.position.set(-3, 1, 2);
+    scene.add(fillLight);
+
+    const rimLight = new THREE.PointLight(0x00ff66, 0, 10);
+    rimLight.position.set(0, -1, -2);
+    scene.add(rimLight);
+
+    // Spoon — loaded from OBJ, kept in a group for transforms
+    const spoonGroup = new THREE.Group();
+    // Upright: rotate so Z-axis of model points upward (bowl on top)
+    spoonGroup.rotation.x = Math.PI * 0.55;
+    scene.add(spoonGroup);
+    spoonGroupRef.current = spoonGroup;
+
+    // Bounding extents for bend calculation (Z axis of model)
+    // Bowl is at negative Z, handle at positive Z.
+    // We bend from the bowl side: bendStart is just below centre,
+    // bendEnd is the bowl tip (most negative Z).
+    let bendStart = 0;
+    let bendEnd = -0.92;
+
+    const loader = new OBJLoader();
+    loader.load(spoonObjUrl, (obj) => {
+      if (cleanedUpRef.current) return;
+      obj.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          child.material = SPOON_MATERIAL;
+          // Store original positions for vertex bending
+          const geo = child.geometry as THREE.BufferGeometry;
+          const posAttr = geo.getAttribute("position") as THREE.BufferAttribute;
+          origPositionsRef.current.set(geo, new Float32Array(posAttr.array));
+          geo.computeVertexNormals();
+        }
+      });
+
+      // Centre and scale — 20% smaller than full-fit
+      const box = new THREE.Box3().setFromObject(obj);
+      const centre = box.getCenter(new THREE.Vector3());
+      const size = box.getSize(new THREE.Vector3());
+      const scale = (1.8 * 0.8) / Math.max(size.x, size.y, size.z);
+      obj.scale.setScalar(scale);
+      obj.position.sub(centre.multiplyScalar(scale));
+
+      // Recalculate bend extents in scaled space (bowl = negative Z)
+      bendStart = (0.05) * scale - centre.z * scale;  // just above centre
+      bendEnd = (box.min.z * scale) - centre.z * scale; // bowl tip
+
+      spoonGroup.add(obj);
+    });
+
+    // Floating particles
+    const particleCount = 200;
+    const pGeo = new THREE.BufferGeometry();
+    const pPos = new Float32Array(particleCount * 3);
+    for (let i = 0; i < particleCount; i++) {
+      pPos[i * 3] = (Math.random() - 0.5) * 4;
+      pPos[i * 3 + 1] = (Math.random() - 0.5) * 4;
+      pPos[i * 3 + 2] = (Math.random() - 0.5) * 4;
+    }
+    pGeo.setAttribute("position", new THREE.Float32BufferAttribute(pPos, 3));
+    const pMat = new THREE.PointsMaterial({
+      color: 0x00ff44,
+      size: 0.015,
+      transparent: true,
+      opacity: 0.4,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    scene.add(new THREE.Points(pGeo, pMat));
+
+    // Overlay 2D context
+    const overlayCtx = overlay.getContext("2d")!;
     const dpr = window.devicePixelRatio || 1;
 
+    // Resize
+    function resize() {
+      const w = container!.clientWidth;
+      const h = container!.clientHeight;
+      renderer.setSize(w, h);
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      overlay!.width = w * dpr;
+      overlay!.height = h * dpr;
+      overlay!.style.width = w + "px";
+      overlay!.style.height = h + "px";
+      overlayCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    resize();
+    window.addEventListener("resize", resize);
+
+    // Animation loop
+    const clock = new THREE.Clock();
+
     const render = () => {
+      if (cleanedUpRef.current) return;
       rafRef.current = requestAnimationFrame(render);
       frameRef.current += 1;
+      const dt = clock.getDelta();
+      const elapsed = clock.elapsedTime;
+      const w = container!.clientWidth;
+      const h = container!.clientHeight;
 
-      // ── Resize ────────────────────────────────────────────────────
-      const rect = canvas.getBoundingClientRect();
-      const w = rect.width;
-      const h = rect.height;
-      if (canvas.width !== w * dpr || canvas.height !== h * dpr) {
-        canvas.width = w * dpr;
-        canvas.height = h * dpr;
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      }
-
-      // ── FFT on selected frames ───────────────────────────────────
+      // ── FFT ───────────────────────────────────────────────────────
       if (frameRef.current % FFT_EVERY_N_FRAMES === 0) {
         const { buffers, writeIndex, samplesInBuffer } = eegData;
-        const nSamples = samplesInBuffer.current;
-        if (nSamples >= FFT_SIZE) {
-          // Average first 4 channels (frontal) for focus detection
+        if (samplesInBuffer.current >= FFT_SIZE) {
           const input = new Float64Array(FFT_SIZE);
           const chCount = Math.min(eegData.numChannels, 4);
           for (let ch = 0; ch < chCount; ch++) {
@@ -215,210 +351,186 @@ export default function SpoonBend({
             const wi = writeIndex.current;
             const len = buf.length;
             for (let i = 0; i < FFT_SIZE; i++) {
-              const idx = (wi - FFT_SIZE + i + len) % len;
-              input[i] += buf[idx];
+              input[i] += buf[(wi - FFT_SIZE + i + len) % len];
             }
           }
           for (let i = 0; i < FFT_SIZE; i++) input[i] /= chCount;
 
           const result = FFT_ENGINE.analyse(input);
-          if (!result) return;
-          const bp = result.bandPowers;
+          if (result) {
+            const bp = result.bandPowers;
+            const relaxation =
+              (bp["Alpha"] ?? 0) + (bp["Theta"] ?? 0) + (bp["Delta"] ?? 0) + 1e-6;
+            const concentration = (bp["Beta"] ?? 0) + (bp["Gamma"] ?? 0);
+            let raw = concentration / relaxation;
 
-          const alpha = bp["Alpha"] ?? 0;
-          const theta = bp["Theta"] ?? 0;
-          const beta = bp["Beta"] ?? 0;
-          const gamma = bp["Gamma"] ?? 0;
-          const delta = bp["Delta"] ?? 0;
+            if (calibrating) baselineSamples.current.push(raw);
+            if (baselineRef.current !== null)
+              raw = Math.max(0, raw - baselineRef.current);
 
-          // Focus = concentration bands / relaxation bands
-          const relaxation = alpha + theta + delta + 1e-6;
-          const concentration = beta + gamma;
-          let raw = concentration / relaxation;
+            const normalised = Math.min(1, raw / 1.8);
+            focusRef.current =
+              SMOOTH * focusRef.current + (1 - SMOOTH) * normalised;
 
-          // During calibration, collect baseline samples
-          if (calibrating) {
-            baselineSamples.current.push(raw);
-          }
-
-          // Subtract baseline if calibrated
-          if (baselineRef.current !== null) {
-            raw = Math.max(0, raw - baselineRef.current);
-          }
-
-          // Normalise into 0–1 with a soft-clamp
-          // Typical delta from baseline is 0–2
-          const normalised = Math.min(1, raw / 1.8);
-
-          // Smooth
-          focusRef.current =
-            SMOOTH * focusRef.current + (1 - SMOOTH) * normalised;
-
-          // Update React state (throttled to every 4th FFT)
-          if (frameRef.current % (FFT_EVERY_N_FRAMES * 4) === 0) {
-            setFocus(focusRef.current);
-            setBendPct(Math.round(focusRef.current * 100));
-            setBands(bp);
+            if (frameRef.current % (FFT_EVERY_N_FRAMES * 4) === 0) {
+              setFocus(focusRef.current);
+              setBendPct(Math.round(focusRef.current * 100));
+              setBands(bp);
+            }
           }
         }
       }
 
       const f = focusRef.current;
 
-      // ── Clear ─────────────────────────────────────────────────────
-      ctx.fillStyle = "#0a0a0a";
-      ctx.fillRect(0, 0, w, h);
+      // ── Bend loaded spoon vertices ────────────────────────────────
+      origPositionsRef.current.forEach((orig, geo) => {
+        const posAttr = geo.getAttribute("position") as THREE.BufferAttribute;
+        applyBend(posAttr, orig, bendStart, bendEnd, f);
+        geo.computeVertexNormals();
+      });
 
-      // ── Matrix rain ───────────────────────────────────────────────
+      // Subtle idle sway
+      spoonGroup.rotation.y = Math.sin(elapsed * 0.3) * 0.15;
+      spoonGroup.rotation.x =
+        Math.PI * 0.55 + Math.sin(elapsed * 0.2) * 0.03;
+
+      // Green rim glow + particle opacity track focus
+      rimLight.intensity = f * 3;
+      pMat.opacity = 0.15 + f * 0.5;
+
+      // Particle drift
+      const posAttr = pGeo.getAttribute("position") as THREE.BufferAttribute;
+      for (let i = 0; i < particleCount; i++) {
+        let py = posAttr.getY(i);
+        py += (0.03 + f * 0.08) * dt * 10;
+        if (py > 2) py = -2;
+        posAttr.setY(i, py);
+      }
+      posAttr.needsUpdate = true;
+
+      // ── Render 3D ─────────────────────────────────────────────────
+      renderer.render(scene, camera);
+
+      // ── Matrix rain overlay ───────────────────────────────────────
+      overlayCtx.clearRect(0, 0, w, h);
+
       const colW = w / RAIN_COLS;
-      const fontSize = Math.max(10, colW * 0.75);
-      ctx.font = `${fontSize}px "Courier New", monospace`;
+      const fontSize = Math.max(10, colW * 0.72);
+      overlayCtx.font = `${fontSize}px "Courier New", monospace`;
       const drops = dropsRef.current;
 
       for (let c = 0; c < drops.length; c++) {
         const drop = drops[c];
         const x = c * colW + colW / 2;
-
         for (let j = 0; j < drop.chars.length; j++) {
           const cy = drop.y - j * fontSize;
           if (cy < -fontSize || cy > h + fontSize) continue;
-
           const age = j / drop.chars.length;
-          // Brighter when more focused
-          const alpha = (1 - age) * (0.15 + f * 0.55);
-          ctx.fillStyle = `rgba(0,255,70,${alpha.toFixed(3)})`;
-          ctx.fillText(drop.chars[j], x, cy);
+          const a = (1 - age) * (0.08 + f * 0.35);
+          overlayCtx.fillStyle = `rgba(0,255,70,${a.toFixed(3)})`;
+          overlayCtx.fillText(drop.chars[j], x, cy);
         }
-
-        // Move drops
         drop.y += drop.speed * (0.8 + f * 1.5);
         if (drop.y - drop.chars.length * fontSize > h) {
           drop.y = Math.random() * -200;
           drop.speed = 0.5 + Math.random() * 2;
-          // Refresh a few characters
           for (let k = 0; k < 5; k++) {
-            const idx = Math.floor(Math.random() * drop.chars.length);
-            drop.chars[idx] = randomChar();
+            drop.chars[Math.floor(Math.random() * drop.chars.length)] =
+              randomChar();
           }
         }
       }
 
-      // ── Spoon ─────────────────────────────────────────────────────
-      const spoonSize = Math.min(w, h) * 0.55;
-      const spoonCX = w / 2;
-      const spoonCY = h * 0.45;
+      // ── HUD: Focus arc ────────────────────────────────────────────
+      const arcCX = w / 2;
+      const arcCY = h * 0.1;
+      const arcR = Math.min(w, h) * 0.06;
 
-      const pts = spoonPoints(spoonCX, spoonCY, spoonSize, f);
+      overlayCtx.beginPath();
+      overlayCtx.arc(arcCX, arcCY, arcR, Math.PI, 2 * Math.PI);
+      overlayCtx.strokeStyle = "rgba(255,255,255,0.1)";
+      overlayCtx.lineWidth = 4;
+      overlayCtx.stroke();
 
-      // Glow
-      ctx.save();
-      ctx.shadowColor = `rgba(0,255,100,${(0.3 + f * 0.7).toFixed(2)})`;
-      ctx.shadowBlur = 15 + f * 40;
+      overlayCtx.beginPath();
+      overlayCtx.arc(arcCX, arcCY, arcR, Math.PI, Math.PI + f * Math.PI);
+      overlayCtx.strokeStyle = `hsl(${120 * f}, 90%, 50%)`;
+      overlayCtx.lineWidth = 4;
+      overlayCtx.lineCap = "round";
+      overlayCtx.stroke();
 
-      ctx.beginPath();
-      ctx.moveTo(pts[0].x, pts[0].y);
-      for (let i = 1; i < pts.length; i++) {
-        ctx.lineTo(pts[i].x, pts[i].y);
-      }
-      ctx.closePath();
-
-      // Fill — metallic gradient
-      const grad = ctx.createLinearGradient(
-        spoonCX - spoonSize * 0.3,
-        spoonCY - spoonSize * 0.4,
-        spoonCX + spoonSize * 0.3,
-        spoonCY + spoonSize * 0.5,
+      overlayCtx.fillStyle = "#fff";
+      overlayCtx.font = `bold ${Math.max(12, arcR * 0.55)}px system-ui, sans-serif`;
+      overlayCtx.textAlign = "center";
+      overlayCtx.fillText(
+        `${Math.round(f * 100)}%`,
+        arcCX,
+        arcCY + arcR * 0.35,
       );
-      grad.addColorStop(0, "#d4d4d8");
-      grad.addColorStop(0.3, "#a1a1aa");
-      grad.addColorStop(0.5, "#e4e4e7");
-      grad.addColorStop(0.7, "#71717a");
-      grad.addColorStop(1, "#52525b");
-      ctx.fillStyle = grad;
-      ctx.fill();
-
-      // Stroke
-      ctx.strokeStyle = `rgba(0,255,100,${(0.2 + f * 0.6).toFixed(2)})`;
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-      ctx.restore();
+      overlayCtx.font = `${Math.max(10, arcR * 0.35)}px system-ui, sans-serif`;
+      overlayCtx.fillStyle = "rgba(255,255,255,0.5)";
+      overlayCtx.fillText("FOCUS", arcCX, arcCY - arcR * 0.15);
 
       // ── Quote ─────────────────────────────────────────────────────
-      const quoteAlpha = 0.3 + f * 0.5;
-      ctx.fillStyle = `rgba(0,255,70,${quoteAlpha.toFixed(2)})`;
-      ctx.font = `italic ${Math.max(14, w * 0.022)}px Georgia, serif`;
-      ctx.textAlign = "center";
-
+      const qAlpha = 0.3 + f * 0.5;
+      overlayCtx.fillStyle = `rgba(0,255,70,${qAlpha.toFixed(2)})`;
+      overlayCtx.font = `italic ${Math.max(14, w * 0.02)}px Georgia, serif`;
+      overlayCtx.textAlign = "center";
       if (f > 0.7) {
-        ctx.fillText('"There is no spoon."', w / 2, h * 0.88);
+        overlayCtx.fillText('"There is no spoon."', w / 2, h * 0.91);
       } else if (f > 0.4) {
-        ctx.fillText(
+        overlayCtx.fillText(
           '"Do not try to bend the spoon — that\'s impossible."',
           w / 2,
-          h * 0.88,
+          h * 0.91,
         );
       } else {
-        ctx.fillText(
+        overlayCtx.fillText(
           '"Instead, only try to realise the truth…"',
           w / 2,
-          h * 0.88,
+          h * 0.91,
         );
       }
-
-      // ── Focus arc meter ───────────────────────────────────────────
-      const arcCX = w / 2;
-      const arcCY = h * 0.13;
-      const arcR = Math.min(w, h) * 0.07;
-
-      ctx.beginPath();
-      ctx.arc(arcCX, arcCY, arcR, Math.PI, 2 * Math.PI, false);
-      ctx.strokeStyle = "rgba(255,255,255,0.1)";
-      ctx.lineWidth = 4;
-      ctx.stroke();
-
-      ctx.beginPath();
-      ctx.arc(
-        arcCX,
-        arcCY,
-        arcR,
-        Math.PI,
-        Math.PI + f * Math.PI,
-        false,
-      );
-      ctx.strokeStyle = `hsl(${120 * f}, 90%, 50%)`;
-      ctx.lineWidth = 4;
-      ctx.lineCap = "round";
-      ctx.stroke();
-
-      ctx.fillStyle = "#fff";
-      ctx.font = `bold ${Math.max(12, arcR * 0.55)}px system-ui, sans-serif`;
-      ctx.textAlign = "center";
-      ctx.fillText(`${Math.round(f * 100)}%`, arcCX, arcCY + arcR * 0.35);
-
-      ctx.font = `${Math.max(10, arcR * 0.35)}px system-ui, sans-serif`;
-      ctx.fillStyle = "rgba(255,255,255,0.5)";
-      ctx.fillText("FOCUS", arcCX, arcCY - arcR * 0.15);
     };
 
     rafRef.current = requestAnimationFrame(render);
-    return () => cancelAnimationFrame(rafRef.current);
+
+    return () => {
+      cleanedUpRef.current = true;
+      cancelAnimationFrame(rafRef.current);
+      window.removeEventListener("resize", resize);
+      renderer.dispose();
+      envMap.dispose();
+      if (container.contains(renderer.domElement))
+        container.removeChild(renderer.domElement);
+      rendererRef.current = null;
+    };
   }, [eegData, calibrating]);
 
   // ── UI overlay ────────────────────────────────────────────────────
 
   return (
     <div
+      ref={containerRef}
       style={{
         position: "relative",
         width: "100%",
         height: "100%",
-        background: "#0a0a0a",
+        background: "#050505",
         overflow: "hidden",
       }}
     >
       <canvas
-        ref={canvasRef}
-        style={{ width: "100%", height: "100%", display: "block" }}
+        ref={overlayRef}
+        style={{
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          pointerEvents: "none",
+          zIndex: 1,
+        }}
       />
 
       {/* Top bar */}
@@ -432,8 +544,10 @@ export default function SpoonBend({
           justifyContent: "space-between",
           alignItems: "center",
           padding: "12px 20px",
-          background: "linear-gradient(180deg, rgba(0,0,0,0.7) 0%, transparent 100%)",
+          background:
+            "linear-gradient(180deg, rgba(0,0,0,0.7) 0%, transparent 100%)",
           pointerEvents: "none",
+          zIndex: 2,
         }}
       >
         <span
@@ -461,7 +575,7 @@ export default function SpoonBend({
       <div
         style={{
           position: "absolute",
-          bottom: 40,
+          bottom: 50,
           left: 0,
           right: 0,
           textAlign: "center",
@@ -470,12 +584,13 @@ export default function SpoonBend({
           fontSize: 13,
           textShadow: "0 0 6px rgba(0,255,0,0.3)",
           pointerEvents: "none",
+          zIndex: 2,
         }}
       >
         {hint}
       </div>
 
-      {/* Band powers — bottom-left */}
+      {/* Band powers */}
       <div
         style={{
           position: "absolute",
@@ -486,16 +601,17 @@ export default function SpoonBend({
           fontFamily: "monospace",
           fontSize: 11,
           pointerEvents: "none",
+          zIndex: 2,
         }}
       >
         {FREQUENCY_BANDS.map((b) => (
           <span key={b.name} style={{ color: b.color, opacity: 0.7 }}>
-            {b.label.charAt(0)} {((bands[b.name] ?? 0)).toFixed(0)}
+            {b.label.charAt(0)} {(bands[b.name] ?? 0).toFixed(0)}
           </span>
         ))}
       </div>
 
-      {/* Bend percentage — bottom-right */}
+      {/* Bend % */}
       <div
         style={{
           position: "absolute",
@@ -506,12 +622,13 @@ export default function SpoonBend({
           fontSize: 13,
           opacity: 0.7,
           pointerEvents: "none",
+          zIndex: 2,
         }}
       >
         bend {bendPct}%
       </div>
 
-      {/* Exit button (mobile) */}
+      {/* Exit button */}
       <button
         onClick={onExit}
         style={{
@@ -525,7 +642,7 @@ export default function SpoonBend({
           padding: "4px 12px",
           cursor: "pointer",
           fontSize: 13,
-          pointerEvents: "auto",
+          zIndex: 3,
         }}
       >
         ✕
