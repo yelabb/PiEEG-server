@@ -42,6 +42,9 @@ const XRWaveViewExperience = lazy(() => import("../components/XRWaveView"));
 const BlinkBrowserExperience = lazy(
   () => import("./blink-scroll/BlinkBrowser"),
 );
+const NeuralSonificationExperience = lazy(
+  () => import("./neural-sonification/NeuralSonification"),
+);
 
 export const EXPERIENCES: ExperienceEntry[] = [
   {
@@ -64,6 +67,16 @@ export const EXPERIENCES: ExperienceEntry[] = [
     tag: "BCI",
     gradient: ["#0070f3", "#00c853"],
     component: BlinkBrowserExperience,
+    author: "PiEEG community",
+  },
+  {
+    id: "neural-sonification",
+    name: "Neural Sonification",
+    description:
+      "Turn your brainwaves into live music — Delta drives a deep drone, Theta shapes an FM pad, Alpha opens a melodic lead, Beta adds bright harmonics, and Gamma sparkles with shimmer. Full DJ controls for scale, key, reverb, and delay.",
+    tag: "Audio",
+    gradient: ["#f59e0b", "#ef4444"],
+    component: NeuralSonificationExperience,
     author: "PiEEG community",
   },
 ];
