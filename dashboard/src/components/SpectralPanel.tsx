@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, memo, useMemo } from "react";
 import { FftEngine, FREQUENCY_BANDS } from "../lib/fftEngine";
 import type { EEGData, BandPowers, CanvasSize } from "../types";
-import { SAMPLE_RATE } from "../types";
+import { SAMPLE_RATE, TRACE_COLORS } from "../types";
 
 const FFT_SIZE = 256;
 const MAX_DISPLAY_HZ = 60;
@@ -15,7 +15,8 @@ function drawSpectrum(
   ctx: CanvasRenderingContext2D,
   w: number, h: number,
   psd: Float64Array, freqs: Float64Array,
-  maxHz: number, logScale: boolean, selectedBand: string | null
+  maxHz: number, logScale: boolean, selectedBand: string | null,
+  traces?: readonly { psd: Float64Array; color: string }[],
 ) {
   const plotL = 48;
   const plotR = w - 16;
@@ -62,29 +63,43 @@ function drawSpectrum(
     ctx.stroke();
   }
 
-  // PSD curve
-  ctx.beginPath();
-  for (let k = 1; k <= maxBin; k++) {
-    const x = plotL + (freqs[k] / maxHz) * plotW;
-    let v: number;
-    if (logScale) {
-      const dB = 10 * Math.log10((psd[k] || 1e-30) / peak);
-      v = Math.max(0, (dB + 60) / 60);
-    } else {
-      v = psd[k] / peak;
+  // PSD curve(s)
+  const drawCurve = (data: Float64Array, color: string, fill: boolean) => {
+    ctx.beginPath();
+    for (let k = 1; k <= maxBin; k++) {
+      const x = plotL + (freqs[k] / maxHz) * plotW;
+      let v: number;
+      if (logScale) {
+        const dB = 10 * Math.log10((data[k] || 1e-30) / peak);
+        v = Math.max(0, (dB + 60) / 60);
+      } else {
+        v = data[k] / peak;
+      }
+      const y = plotB - Math.min(1, v) * plotH;
+      k === 1 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
     }
-    const y = plotB - Math.min(1, v) * plotH;
-    k === 1 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-  }
-  ctx.strokeStyle = "#58a6ff";
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
 
-  ctx.lineTo(plotL + (freqs[maxBin] / maxHz) * plotW, plotB);
-  ctx.lineTo(plotL + (freqs[1] / maxHz) * plotW, plotB);
-  ctx.closePath();
-  ctx.fillStyle = "rgba(88,166,255,0.07)";
-  ctx.fill();
+    if (fill) {
+      ctx.lineTo(plotL + (freqs[maxBin] / maxHz) * plotW, plotB);
+      ctx.lineTo(plotL + (freqs[1] / maxHz) * plotW, plotB);
+      ctx.closePath();
+      ctx.fillStyle = color.slice(0, 7) + "12";
+      ctx.fill();
+    }
+  };
+
+  if (traces && traces.length > 0) {
+    // multi-channel: recompute peak across all traces
+    peak = 1e-30;
+    for (const t of traces)
+      for (let k = 1; k <= maxBin; k++) if (t.psd[k] > peak) peak = t.psd[k];
+    for (const t of traces) drawCurve(t.psd, t.color, false);
+  } else {
+    drawCurve(psd, "#58a6ff", true);
+  }
 
   // axis labels
   ctx.fillStyle = "#8b949e";
@@ -123,6 +138,7 @@ const SpectralPanel = memo(function SpectralPanel({ eegData }: SpectralPanelProp
   const rafRef = useRef(0);
   const frameRef = useRef(0);
   const smoothRef = useRef<Float64Array | null>(null);
+  const smoothAllRef = useRef<Float64Array[]>([]);
   const uiTsRef = useRef(0);
   const avgBufRef = useRef<Float64Array | null>(null);
   const bandPowersRef = useRef<BandPowers>({});
@@ -187,7 +203,29 @@ const SpectralPanel = memo(function SpectralPanel({ eegData }: SpectralPanelProp
         if (bufs && count >= FFT_SIZE) {
           let result;
           const nCh = eegData.numChannels;
-          if (channel === -1) {
+          if (channel === -2) {
+            // ALL: compute FFT per channel, smooth each independently
+            const allSmooth = smoothAllRef.current;
+            // ensure smooth array is right length
+            while (allSmooth.length < nCh) allSmooth.push(new Float64Array(0));
+            if (allSmooth.length > nCh) allSmooth.length = nCh;
+
+            let firstResult = null;
+            for (let ch = 0; ch < nCh; ch++) {
+              const r = fft.analyseRing(bufs[ch], wi, count);
+              if (!r) continue;
+              if (!firstResult) firstResult = r;
+              if (!allSmooth[ch] || allSmooth[ch].length !== r.psd.length) {
+                allSmooth[ch] = new Float64Array(r.psd);
+              } else {
+                const s = allSmooth[ch];
+                const c = r.psd;
+                for (let k = 0; k < s.length; k++)
+                  s[k] = s[k] * (1 - SMOOTHING) + c[k] * SMOOTHING;
+              }
+            }
+            result = firstResult;
+          } else if (channel === -1) {
             const tmp = avgBufRef.current!;
             const bufLen = eegData.bufferSize;
             const start = (wi - FFT_SIZE + bufLen) % bufLen;
@@ -237,7 +275,21 @@ const SpectralPanel = memo(function SpectralPanel({ eegData }: SpectralPanelProp
       }
 
       const psd = smoothRef.current;
-      if (!psd || psd.length === 0) {
+      if (channel === -2) {
+        const allSmooth = smoothAllRef.current;
+        if (allSmooth.length === 0 || !allSmooth[0] || allSmooth[0].length === 0) {
+          ctx.fillStyle = "#4b5563";
+          ctx.font = "13px monospace";
+          ctx.textAlign = "center";
+          ctx.fillText("Collecting samples…", w / 2, h / 2);
+        } else {
+          const traces = allSmooth.map((s, i) => ({
+            psd: s,
+            color: TRACE_COLORS[i % TRACE_COLORS.length],
+          }));
+          drawSpectrum(ctx, w, h, allSmooth[0], fft._frequencies, MAX_DISPLAY_HZ, logScale, selectedBand, traces);
+        }
+      } else if (!psd || psd.length === 0) {
         ctx.fillStyle = "#4b5563";
         ctx.font = "13px monospace";
         ctx.textAlign = "center";
@@ -260,7 +312,7 @@ const SpectralPanel = memo(function SpectralPanel({ eegData }: SpectralPanelProp
     ...FREQUENCY_BANDS.map((b) => bandPowers[b.name] || 0),
     1e-6,
   );
-  const chLabel = channel === -1 ? "Avg" : `Ch ${channel + 1}`;
+  const chLabel = channel === -2 ? "All" : channel === -1 ? "Avg" : `Ch ${channel + 1}`;
   const dominantColor =
     FREQUENCY_BANDS.find((b) => b.name === dominant.band)?.color || "#8b949e";
 
@@ -279,6 +331,12 @@ const SpectralPanel = memo(function SpectralPanel({ eegData }: SpectralPanelProp
             onClick={() => setChannel(-1)}
           >
             Avg
+          </button>
+          <button
+            className={`sp-ch${channel === -2 ? " active" : ""}`}
+            onClick={() => setChannel(-2)}
+          >
+            All
           </button>
           {Array.from({ length: eegData.numChannels }, (_, i) => (
             <button
