@@ -87,6 +87,7 @@ export function useRelax(eegData: EEGData, config: RelaxConfig = {}) {
   const baselineRef = useRef(0); // baseline composite to subtract
   const smoothedRef = useRef(0);
   const calibratingRef = useRef(false);
+  const calibrationPromiseRef = useRef<Promise<void> | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -141,10 +142,10 @@ export function useRelax(eegData: EEGData, config: RelaxConfig = {}) {
   // ── Calibration (capture "alert" baseline to subtract) ─────────────
 
   const calibrate = useCallback((): Promise<void> => {
-    if (calibratingRef.current) return Promise.resolve();
+    if (calibratingRef.current) return calibrationPromiseRef.current!;
     calibratingRef.current = true;
 
-    return new Promise((resolve) => {
+    const p = new Promise<void>((resolve) => {
       const samples: number[] = [];
       const start = performance.now();
 
@@ -175,10 +176,13 @@ export function useRelax(eegData: EEGData, config: RelaxConfig = {}) {
           }
           smoothedRef.current = 0;
           calibratingRef.current = false;
+          calibrationPromiseRef.current = null;
           resolve();
         }
       }, BASELINE_POLL_MS);
     });
+    calibrationPromiseRef.current = p;
+    return p;
   }, [bpRef, alphaWeight, tbrCeiling]);
 
   const resetCalibration = useCallback(() => {

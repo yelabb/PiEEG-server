@@ -75,6 +75,7 @@ export function useFocus(eegData: EEGData, config: FocusConfig = {}) {
   const baselineRef = useRef(0);
   const smoothedRef = useRef(0);
   const calibratingRef = useRef(false);
+  const calibrationPromiseRef = useRef<Promise<void> | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Periodic focus computation
@@ -112,10 +113,10 @@ export function useFocus(eegData: EEGData, config: FocusConfig = {}) {
   // ── Calibration ──────────────────────────────────────────────────────
 
   const calibrate = useCallback((): Promise<void> => {
-    if (calibratingRef.current) return Promise.resolve();
+    if (calibratingRef.current) return calibrationPromiseRef.current!;
     calibratingRef.current = true;
 
-    return new Promise((resolve) => {
+    const p = new Promise<void>((resolve) => {
       const samples: number[] = [];
       const start = performance.now();
 
@@ -137,10 +138,13 @@ export function useFocus(eegData: EEGData, config: FocusConfig = {}) {
           }
           smoothedRef.current = 0;
           calibratingRef.current = false;
+          calibrationPromiseRef.current = null;
           resolve();
         }
       }, BASELINE_POLL_MS);
     });
+    calibrationPromiseRef.current = p;
+    return p;
   }, [bpRef]);
 
   const resetCalibration = useCallback(() => {
