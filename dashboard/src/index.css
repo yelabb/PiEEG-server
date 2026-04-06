@@ -99,6 +99,23 @@ body {
   font-size: 12px;
 }
 
+.demo-badge {
+  margin-left: 10px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #000;
+  background: #f5a623;
+  border-radius: 4px;
+  animation: demo-pulse 2s ease-in-out infinite;
+}
+
+@keyframes demo-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
 .status-bar {
   display: flex;
   align-items: center;
