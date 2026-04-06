@@ -22,6 +22,8 @@ from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 
 import websockets
+from websockets.datastructures import Headers
+from websockets.http11 import Response as HTTPResponse
 
 from .acquisition import AcquisitionLoop
 from .auth import AuthManager
@@ -87,11 +89,17 @@ class PiEEGServer:
         logger.info("Webhooks enabled (%d rules loaded)",
                     len(self._webhooks.list_rules()))
 
+    async def _health_check(self, connection, request):
+        """Respond to HTTP health checks (e.g. Fly.io) without upgrading."""
+        if request.path == "/health":
+            return HTTPResponse(200, "OK", Headers(), b"ok\n")
+
     async def run(self):
         """Start the WebSocket server and the broadcast loop."""
         async with websockets.serve(
             self._handle_client, self._host, self._port,
             ping_interval=20, ping_timeout=10,
+            process_request=self._health_check,
         ):
             logger.info(
                 "PiEEG streaming on ws://%s:%d", self._host, self._port

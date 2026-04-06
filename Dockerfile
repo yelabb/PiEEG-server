@@ -8,6 +8,6 @@ COPY webhooks.json ./
 
 RUN pip install --no-cache-dir .
 
-EXPOSE 1616 1617
+EXPOSE 1616
 
-CMD ["pieeg-server", "--mock"]
+CMD ["pieeg-server", "--mock", "--no-dashboard"]

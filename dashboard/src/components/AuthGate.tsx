@@ -7,11 +7,13 @@ interface AuthGateProps {
 type AuthState = "checking" | "login" | "ok";
 
 export default function AuthGate({ children }: AuthGateProps) {
-  const [state, setState] = useState<AuthState>("checking");
+  const serverUrl = import.meta.env.VITE_SERVER_URL as string | undefined;
+  const [state, setState] = useState<AuthState>(serverUrl ? "ok" : "checking");
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => {
+    if (serverUrl) return; // skip auth when using external server
     const checkAuth = async () => {
       try {
         const r = await fetch("/auth/status", { credentials: "include" });
