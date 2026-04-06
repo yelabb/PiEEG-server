@@ -206,6 +206,8 @@ export default function NeuralSonification({ eegData, onExit }: ExperienceProps)
     return () => cancelAnimationFrame(rafRef.current);
   }, [playing, config.sensitivity, config.rootNote, config.scale, audio.latestBP]);
 
+  const showLanding = !playing || !audio.latestBP.current;
+
   // ── Render ─────────────────────────────────────────────────────────
 
   return (
@@ -213,128 +215,236 @@ export default function NeuralSonification({ eegData, onExit }: ExperienceProps)
       position: "fixed", inset: 0, zIndex: 9999,
       background: "#0d1117", display: "flex", flexDirection: "column",
     }}>
-      {/* Visualiser canvas */}
+      {/* Visualiser canvas (always mounted for RAF) */}
       <canvas
         ref={canvasRef}
-        style={{ flex: 1, width: "100%", display: "block" }}
+        style={{
+          flex: 1, width: "100%", display: "block",
+          opacity: showLanding ? 0.15 : 1,
+          transition: "opacity 0.6s ease",
+        }}
       />
 
-      {/* Floating controls */}
-      <div style={{
-        position: "absolute", bottom: 0, left: 0, right: 0,
-        background: "linear-gradient(transparent, #0d1117cc 30%, #0d1117)",
-        padding: "16px 20px 20px",
-      }}>
-        {/* Transport bar */}
+      {/* ── Landing overlay ─────────────────────────────────────────── */}
+      {showLanding && (
         <div style={{
-          display: "flex", alignItems: "center", gap: 12,
-          justifyContent: "center", marginBottom: showControls ? 16 : 0,
+          position: "absolute", inset: 0,
+          display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center",
+          gap: 32, padding: 24, pointerEvents: "auto",
         }}>
-          <button onClick={togglePlay} style={btnStyle}>
-            {playing ? "⏸ Pause" : "▶ Play"}
+          {/* Back button — top left */}
+          <button
+            onClick={onExit}
+            style={{
+              position: "absolute", top: 16, left: 16,
+              background: "transparent", border: "1px solid #30363d",
+              color: "#8b949e", borderRadius: 6, padding: "6px 14px",
+              fontSize: 13, cursor: "pointer",
+            }}
+          >
+            ← Back
           </button>
-          <button onClick={() => setShowControls((v) => !v)} style={btnStyle}>
-            {showControls ? "▲ Hide" : "⚙ Controls"}
+
+          {/* Hero */}
+          <div style={{ textAlign: "center", maxWidth: 520 }}>
+            <div style={{
+              fontSize: 40, marginBottom: 8,
+              filter: "drop-shadow(0 0 24px #58a6ff55)",
+            }}>
+              🎵
+            </div>
+            <h1 style={{
+              color: "#e6edf3", fontSize: 28, fontWeight: 700, margin: "0 0 8px",
+              letterSpacing: "-0.02em",
+            }}>
+              Neural Sonification
+            </h1>
+            <p style={{ color: "#8b949e", fontSize: 14, margin: 0, lineHeight: 1.5 }}>
+              Your brainwaves become music. Each EEG frequency band drives
+              a different layer of a live synthesiser.
+            </p>
+          </div>
+
+          {/* Band → Layer cards */}
+          <div style={{
+            display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center",
+            maxWidth: 560,
+          }}>
+            {FREQUENCY_BANDS.map((band) => (
+              <div key={band.name} style={{
+                background: "#161b22", border: `1px solid ${band.color}33`,
+                borderRadius: 10, padding: "12px 16px", minWidth: 92,
+                textAlign: "center", flex: "0 0 auto",
+              }}>
+                <div style={{
+                  color: band.color, fontSize: 18, fontWeight: 700,
+                  lineHeight: 1, marginBottom: 4,
+                }}>
+                  {band.label.split(" ")[0]}
+                </div>
+                <div style={{ color: "#e6edf3", fontSize: 12, fontWeight: 600 }}>
+                  {band.name}
+                </div>
+                <div style={{
+                  color: "#484f58", fontSize: 10, margin: "4px 0 0",
+                  borderTop: "1px solid #21262d", paddingTop: 4,
+                }}>
+                  {band.low}–{band.high} Hz
+                </div>
+                <div style={{ color: band.color, fontSize: 11, fontWeight: 600, marginTop: 2 }}>
+                  → {LAYER_LABELS[band.name]}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Play button */}
+          <button onClick={togglePlay} style={{
+            background: "linear-gradient(135deg, #238636, #2ea043)",
+            color: "#fff", border: "none", borderRadius: 50,
+            padding: "14px 40px", fontSize: 17, fontWeight: 700,
+            cursor: "pointer", letterSpacing: "0.02em",
+            boxShadow: "0 0 30px #23863644, 0 2px 8px #00000066",
+            transition: "transform 0.15s ease, box-shadow 0.15s ease",
+          }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = "scale(1.05)";
+              e.currentTarget.style.boxShadow = "0 0 40px #238636aa, 0 4px 16px #00000088";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = "scale(1)";
+              e.currentTarget.style.boxShadow = "0 0 30px #23863644, 0 2px 8px #00000066";
+            }}
+          >
+            ▶ &nbsp;Start Sonification
           </button>
-          <button onClick={onExit} style={{ ...btnStyle, background: "#da3633" }}>
-            ✕ Exit
-          </button>
-          <span style={{ color: "#484f58", fontSize: 11, marginLeft: 8 }}>
-            Space=play · C=controls · Esc=exit
+
+          {/* Hint */}
+          <span style={{ color: "#484f58", fontSize: 11 }}>
+            Space = play &middot; C = controls &middot; Esc = exit
           </span>
         </div>
+      )}
 
-        {/* Expanded controls panel */}
-        {showControls && (
+      {/* ── Transport + controls (visible when playing) ──────────── */}
+      {!showLanding && (
+        <div style={{
+          position: "absolute", bottom: 0, left: 0, right: 0,
+          background: "linear-gradient(transparent, #0d1117cc 30%, #0d1117)",
+          padding: "16px 20px 20px",
+        }}>
+          {/* Transport bar */}
           <div style={{
-            display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
-            gap: 12, maxWidth: 900, margin: "0 auto",
+            display: "flex", alignItems: "center", gap: 12,
+            justifyContent: "center", marginBottom: showControls ? 16 : 0,
           }}>
-            {/* Scale */}
-            <label style={labelStyle}>
-              Scale
-              <select
-                value={config.scale}
-                onChange={(e) => updateConfig("scale", e.target.value)}
-                style={selectStyle}
-              >
-                {SCALES.map((s) => (
-                  <option key={s} value={s}>{s.replace(/_/g, " ")}</option>
-                ))}
-              </select>
-            </label>
-
-            {/* Root note */}
-            <label style={labelStyle}>
-              Root Note
-              <select
-                value={config.rootNote}
-                onChange={(e) => updateConfig("rootNote", e.target.value)}
-                style={selectStyle}
-              >
-                {ROOTS.map((r) => (
-                  <option key={r} value={r}>{r}</option>
-                ))}
-              </select>
-            </label>
-
-            {/* Master volume */}
-            <label style={labelStyle}>
-              Volume — {(config.masterVolume * 100).toFixed(0)}%
-              <input
-                type="range" min={0} max={1} step={0.01}
-                value={config.masterVolume}
-                onChange={(e) => updateConfig("masterVolume", +e.target.value)}
-                style={rangeStyle}
-              />
-            </label>
-
-            {/* Sensitivity */}
-            <label style={labelStyle}>
-              Sensitivity — {config.sensitivity.toFixed(1)}×
-              <input
-                type="range" min={0.5} max={5} step={0.1}
-                value={config.sensitivity}
-                onChange={(e) => updateConfig("sensitivity", +e.target.value)}
-                style={rangeStyle}
-              />
-            </label>
-
-            {/* Reverb */}
-            <label style={labelStyle}>
-              Reverb — {(config.reverbMix * 100).toFixed(0)}%
-              <input
-                type="range" min={0} max={1} step={0.01}
-                value={config.reverbMix}
-                onChange={(e) => updateConfig("reverbMix", +e.target.value)}
-                style={rangeStyle}
-              />
-            </label>
-
-            {/* Delay time */}
-            <label style={labelStyle}>
-              Delay — {(config.delayTime * 1000).toFixed(0)}ms
-              <input
-                type="range" min={0.05} max={1} step={0.01}
-                value={config.delayTime}
-                onChange={(e) => updateConfig("delayTime", +e.target.value)}
-                style={rangeStyle}
-              />
-            </label>
-
-            {/* Delay feedback */}
-            <label style={labelStyle}>
-              Feedback — {(config.delayFeedback * 100).toFixed(0)}%
-              <input
-                type="range" min={0} max={0.9} step={0.01}
-                value={config.delayFeedback}
-                onChange={(e) => updateConfig("delayFeedback", +e.target.value)}
-                style={rangeStyle}
-              />
-            </label>
+            <button onClick={togglePlay} style={btnStyle}>
+              ⏸ Pause
+            </button>
+            <button onClick={() => setShowControls((v) => !v)} style={btnStyle}>
+              {showControls ? "▲ Hide" : "⚙ Controls"}
+            </button>
+            <button onClick={onExit} style={{ ...btnStyle, background: "#da3633" }}>
+              ✕ Exit
+            </button>
+            <span style={{ color: "#484f58", fontSize: 11, marginLeft: 8 }}>
+              Space=play · C=controls · Esc=exit
+            </span>
           </div>
-        )}
-      </div>
+
+          {/* Expanded controls panel */}
+          {showControls && (
+            <div style={{
+              display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+              gap: 12, maxWidth: 900, margin: "0 auto",
+            }}>
+              {/* Scale */}
+              <label style={labelStyle}>
+                Scale
+                <select
+                  value={config.scale}
+                  onChange={(e) => updateConfig("scale", e.target.value)}
+                  style={selectStyle}
+                >
+                  {SCALES.map((s) => (
+                    <option key={s} value={s}>{s.replace(/_/g, " ")}</option>
+                  ))}
+                </select>
+              </label>
+
+              {/* Root note */}
+              <label style={labelStyle}>
+                Root Note
+                <select
+                  value={config.rootNote}
+                  onChange={(e) => updateConfig("rootNote", e.target.value)}
+                  style={selectStyle}
+                >
+                  {ROOTS.map((r) => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+              </label>
+
+              {/* Master volume */}
+              <label style={labelStyle}>
+                Volume — {(config.masterVolume * 100).toFixed(0)}%
+                <input
+                  type="range" min={0} max={1} step={0.01}
+                  value={config.masterVolume}
+                  onChange={(e) => updateConfig("masterVolume", +e.target.value)}
+                  style={rangeStyle}
+                />
+              </label>
+
+              {/* Sensitivity */}
+              <label style={labelStyle}>
+                Sensitivity — {config.sensitivity.toFixed(1)}×
+                <input
+                  type="range" min={0.5} max={5} step={0.1}
+                  value={config.sensitivity}
+                  onChange={(e) => updateConfig("sensitivity", +e.target.value)}
+                  style={rangeStyle}
+                />
+              </label>
+
+              {/* Reverb */}
+              <label style={labelStyle}>
+                Reverb — {(config.reverbMix * 100).toFixed(0)}%
+                <input
+                  type="range" min={0} max={1} step={0.01}
+                  value={config.reverbMix}
+                  onChange={(e) => updateConfig("reverbMix", +e.target.value)}
+                  style={rangeStyle}
+                />
+              </label>
+
+              {/* Delay time */}
+              <label style={labelStyle}>
+                Delay — {(config.delayTime * 1000).toFixed(0)}ms
+                <input
+                  type="range" min={0.05} max={1} step={0.01}
+                  value={config.delayTime}
+                  onChange={(e) => updateConfig("delayTime", +e.target.value)}
+                  style={rangeStyle}
+                />
+              </label>
+
+              {/* Delay feedback */}
+              <label style={labelStyle}>
+                Feedback — {(config.delayFeedback * 100).toFixed(0)}%
+                <input
+                  type="range" min={0} max={0.9} step={0.01}
+                  value={config.delayFeedback}
+                  onChange={(e) => updateConfig("delayFeedback", +e.target.value)}
+                  style={rangeStyle}
+                />
+              </label>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
