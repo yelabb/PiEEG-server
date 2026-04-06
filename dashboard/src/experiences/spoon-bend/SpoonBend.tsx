@@ -152,6 +152,7 @@ export default function SpoonBend({ eegData, onExit }: ExperienceProps) {
   const origPositionsRef = useRef<Map<THREE.BufferGeometry, Float32Array>>(new Map());
   const cleanedUpRef = useRef(false);
 
+  const [showDisclaimer, setShowDisclaimer] = useState(true);
   const [calibrating, setCalibrating] = useState(false);
   const [focus, setFocus] = useState(0);
   const [bendPct, setBendPct] = useState(0);
@@ -647,6 +648,74 @@ export default function SpoonBend({ eegData, onExit }: ExperienceProps) {
       >
         ✕
       </button>
+
+      {/* Disclaimer overlay */}
+      {showDisclaimer && (
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background: "rgba(0,0,0,0.85)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 10,
+          }}
+        >
+          <div
+            style={{
+              maxWidth: 420,
+              padding: "28px 32px",
+              background: "rgba(10,10,10,0.95)",
+              border: "1px solid rgba(0,255,70,0.25)",
+              borderRadius: 12,
+              textAlign: "center",
+              fontFamily: "monospace",
+            }}
+          >
+            <div style={{ fontSize: 28, marginBottom: 12 }}>⚠️</div>
+            <h2
+              style={{
+                color: "#0f0",
+                fontSize: 16,
+                margin: "0 0 12px",
+                textShadow: "0 0 8px rgba(0,255,0,0.4)",
+              }}
+            >
+              For entertainment only
+            </h2>
+            <p
+              style={{
+                color: "rgba(255,255,255,0.7)",
+                fontSize: 13,
+                lineHeight: 1.6,
+                margin: "0 0 20px",
+              }}
+            >
+              PiEEG does not measure electrode impedance, so the signal may
+              contain significant noise. Movements you see could be caused by
+              random electrical artifacts rather than actual brain activity.
+              Treat this as a fun demo, not a reliable neurofeedback tool.
+            </p>
+            <button
+              onClick={() => setShowDisclaimer(false)}
+              style={{
+                background: "rgba(0,255,70,0.15)",
+                border: "1px solid rgba(0,255,70,0.4)",
+                borderRadius: 6,
+                color: "#0f0",
+                padding: "8px 28px",
+                cursor: "pointer",
+                fontSize: 14,
+                fontFamily: "monospace",
+                textShadow: "0 0 6px rgba(0,255,0,0.3)",
+              }}
+            >
+              Got it — let me try!
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

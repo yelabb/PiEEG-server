@@ -38,7 +38,7 @@ export default function ExperiencesPage({ eegData, yScale, onBack, sendCommand }
         </button>
         <div className="exp-title-group">
           <h1 className="exp-title">
-            Experiences
+            Mini Games
           </h1>
           <span className="exp-count">{EXPERIENCES.length}</span>
         </div>

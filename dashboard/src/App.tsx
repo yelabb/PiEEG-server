@@ -383,7 +383,7 @@ export default function App() {
           onClick={() => setView("experiences")}
           title="Open immersive EEG experiences"
         >
-          Experiences
+          Mini Games
         </button>
         <div className="sep" />
         <div className="control-group">
