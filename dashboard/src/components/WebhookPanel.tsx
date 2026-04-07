@@ -9,6 +9,7 @@ import {
   type WebhookEvent,
 } from "../types";
 import type { UseWebhooksReturn } from "../hooks/useWebhooks";
+import { WEBHOOK_RECIPES, RECIPE_CATEGORIES, type WebhookRecipe } from "../lib/webhookRecipes";
 
 // ── trigger labels / descriptions ─────────────────────────────────────────
 
@@ -53,7 +54,8 @@ export default function WebhookPanel({
 }: Props) {
   const { rules, events, saveRule, deleteRule, testRule, toggleRule } = webhooks;
   const [editing, setEditing] = useState<WebhookRule | null>(null);
-  const [tab, setTab] = useState<"rules" | "log">("rules");
+  const [tab, setTab] = useState<"rules" | "log" | "recipes">("rules");
+  const [recipeCat, setRecipeCat] = useState<string>("all");
 
   if (!open) return null;
 
@@ -86,6 +88,9 @@ export default function WebhookPanel({
       <div className="webhook-tabs">
         <button className={`wh-tab${tab === "rules" ? " active" : ""}`} onClick={() => setTab("rules")}>
           Rules ({rules.length}) <Hint text="Trigger rules that fire webhooks when EEG conditions are met" />
+        </button>
+        <button className={`wh-tab${tab === "recipes" ? " active" : ""}`} onClick={() => setTab("recipes")}>
+          Recipes <Hint text="Pre-built templates for IFTTT, Zapier, and more — one-click import" />
         </button>
         <button className={`wh-tab${tab === "log" ? " active" : ""}`} onClick={() => setTab("log")}>
           Log ({events.length}) <Hint text="History of recently fired webhook events" />
@@ -148,6 +153,36 @@ export default function WebhookPanel({
         </div>
       )}
 
+      {tab === "recipes" && (
+        <div className="wh-recipes">
+          <div className="wh-recipe-cats">
+            {RECIPE_CATEGORIES.map((c) => (
+              <button
+                key={c.id}
+                className={`wh-recipe-cat${recipeCat === c.id ? " active" : ""}`}
+                onClick={() => setRecipeCat(c.id)}
+              >
+                {c.icon} {c.label}
+              </button>
+            ))}
+          </div>
+          <div className="wh-recipe-list">
+            {WEBHOOK_RECIPES
+              .filter((r) => recipeCat === "all" || r.category === recipeCat)
+              .map((recipe) => (
+                <RecipeCard
+                  key={recipe.id}
+                  recipe={recipe}
+                  onUse={() => {
+                    setEditing(recipeToRule(recipe));
+                    setTab("rules");
+                  }}
+                />
+              ))}
+          </div>
+        </div>
+      )}
+
       {tab === "log" && (
         <div className="webhook-log">
           {events.length === 0 && <p className="wh-empty">No webhook events yet.</p>}
@@ -202,6 +237,47 @@ const SERVICE_HELP: Record<ServiceType, string> = {
   ifttt: "Uses IFTTT Webhooks (Maker) service. Sends value1 (measured value), value2 (trigger type), value3 (full JSON).",
   zapier: "Uses Zapier Catch Hook. Sends flat JSON with all fields for easy Zap mapping.",
 };
+
+// ── Recipe helpers ────────────────────────────────────────────────────────
+
+function recipeToRule(recipe: WebhookRecipe): WebhookRule {
+  return {
+    id: "",
+    name: recipe.name,
+    enabled: true,
+    trigger_type: recipe.trigger_type,
+    params: { ...recipe.params },
+    url: "",
+    method: "POST",
+    headers: {},
+    body_template: "",
+    cooldown: recipe.cooldown,
+    last_fired: 0,
+    fire_count: 0,
+    service: recipe.service,
+  };
+}
+
+function RecipeCard({ recipe, onUse }: { recipe: WebhookRecipe; onUse: () => void }) {
+  return (
+    <div className="wh-recipe-card">
+      <div className="wh-recipe-icon">{recipe.icon}</div>
+      <div className="wh-recipe-body">
+        <div className="wh-recipe-header">
+          <span className="wh-recipe-name">{recipe.name}</span>
+          <span className={`wh-badge wh-service-${recipe.service}`}>
+            {recipe.service === "generic" ? "Webhook" : recipe.service.toUpperCase()}
+          </span>
+        </div>
+        <p className="wh-recipe-desc">{recipe.description}</p>
+        <p className="wh-recipe-action">💡 {recipe.actionHint}</p>
+      </div>
+      <button className="btn btn-sm wh-recipe-use" onClick={onUse} title="Use this recipe">
+        Use
+      </button>
+    </div>
+  );
+}
 
 // ── Rule editor form ──────────────────────────────────────────────────────
 

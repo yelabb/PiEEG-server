@@ -53,6 +53,9 @@ const VRChatOSCExperience = lazy(
 const SpoonBendExperience = lazy(
   () => import("./spoon-bend/SpoonBend"),
 );
+const WebhookWizardExperience = lazy(
+  () => import("./webhook-wizard/WebhookWizard"),
+);
 
 export const EXPERIENCES: ExperienceEntry[] = [
   {
@@ -105,6 +108,16 @@ export const EXPERIENCES: ExperienceEntry[] = [
     tag: "Focus",
     gradient: ["#059669", "#0a0a0a"],
     component: SpoonBendExperience,
+    author: "PiEEG community",
+  },
+  {
+    id: "webhook-wizard",
+    name: "Webhook Wizard",
+    description:
+      "Guided walkthrough to set up your first brain-powered automation — connect IFTTT, Zapier, or any webhook in 60 seconds with live EEG feedback.",
+    tag: "Automation",
+    gradient: ["#ff4a00", "#33ccff"],
+    component: WebhookWizardExperience,
     author: "PiEEG community",
   },
 ];
