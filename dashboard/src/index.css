@@ -3346,3 +3346,527 @@ body {
   margin-left: auto;
   flex-shrink: 0;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Webhook Recipes Tab
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.wh-recipes {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wh-recipe-cats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.wh-recipe-cat {
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.wh-recipe-cat:hover {
+  border-color: var(--border-hover);
+  color: var(--text);
+}
+
+.wh-recipe-cat.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-light);
+}
+
+.wh-recipe-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wh-recipe-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  transition: border-color 0.15s;
+}
+
+.wh-recipe-card:hover {
+  border-color: var(--border-hover);
+}
+
+.wh-recipe-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+  line-height: 1;
+  margin-top: 2px;
+}
+
+.wh-recipe-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.wh-recipe-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 3px;
+}
+
+.wh-recipe-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.wh-recipe-desc {
+  font-size: 10px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  margin: 0 0 4px;
+}
+
+.wh-recipe-action {
+  font-size: 9px;
+  color: var(--text-dim);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.wh-recipe-use {
+  flex-shrink: 0;
+  margin-top: 4px;
+  background: var(--accent-soft) !important;
+  border-color: var(--accent) !important;
+  color: var(--accent-light) !important;
+  font-weight: 600 !important;
+  padding: 4px 10px !important;
+}
+
+.wh-recipe-use:hover {
+  background: var(--accent) !important;
+  color: #fff !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Webhook Wizard Experience
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.wiz-root {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  z-index: 900;
+}
+
+.wiz-header {
+  text-align: center;
+  padding: 24px 16px 12px;
+  flex-shrink: 0;
+}
+
+.wiz-exit {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  font-size: 12px;
+}
+
+.wiz-title {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0;
+  background: linear-gradient(90deg, #ff4a00, #33ccff);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.wiz-subtitle {
+  display: block;
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+
+/* ── Progress ── */
+.wiz-progress {
+  position: relative;
+  margin: 0 auto;
+  width: 100%;
+  max-width: 600px;
+  padding: 0 16px;
+  flex-shrink: 0;
+}
+
+.wiz-progress-bar {
+  height: 2px;
+  background: linear-gradient(90deg, #ff4a00, #33ccff);
+  border-radius: 1px;
+  transition: width 0.4s ease;
+}
+
+.wiz-steps {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  gap: 4px;
+}
+
+.wiz-step-dot {
+  font-size: 9px;
+  color: var(--text-dim);
+  font-weight: 500;
+  transition: color 0.2s;
+}
+
+.wiz-step-dot.active {
+  color: var(--text-secondary);
+}
+
+.wiz-step-dot.current {
+  color: var(--text);
+  font-weight: 700;
+}
+
+/* ── Live meter ── */
+.wiz-meter {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  max-width: 600px;
+  margin: 12px auto 0;
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.wiz-meter-bar {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.wiz-meter-label {
+  font-size: 8px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.wiz-meter-track {
+  width: 100%;
+  height: 4px;
+  background: var(--surface);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.wiz-meter-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.25s ease;
+}
+
+.wiz-meter-val {
+  font-size: 9px;
+  font-family: var(--mono);
+  color: var(--text-dim);
+}
+
+/* ── Body ── */
+.wiz-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 16px;
+  max-width: 600px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.wiz-body h2 {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0 0 8px;
+  text-align: center;
+}
+
+.wiz-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: center;
+  margin: 0 0 16px;
+  line-height: 1.5;
+}
+
+/* ── Choose step ── */
+.wiz-choose {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.wiz-recipe-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px;
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+.wiz-recipe-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: left;
+  color: var(--text);
+}
+
+.wiz-recipe-card:hover {
+  border-color: var(--border-hover);
+  background: var(--surface-raised);
+}
+
+.wiz-recipe-card.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.wiz-recipe-icon {
+  font-size: 20px;
+}
+
+.wiz-recipe-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.wiz-recipe-desc {
+  font-size: 10px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+/* ── Connect / Configure steps ── */
+.wiz-connect,
+.wiz-configure,
+.wiz-test,
+.wiz-done {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.wiz-instructions {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-bottom: 16px;
+}
+
+.wiz-instructions ol {
+  margin: 8px 0 12px 18px;
+  padding: 0;
+}
+
+.wiz-instructions li {
+  margin-bottom: 4px;
+}
+
+.wiz-instructions code {
+  font-size: 11px;
+  color: var(--accent-light);
+  background: var(--accent-soft);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.wiz-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+  display: block;
+}
+
+.wiz-input {
+  width: 100%;
+  padding: 8px 10px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  color: var(--text);
+  font-size: 12px;
+  font-family: var(--mono);
+  color-scheme: dark;
+}
+
+.wiz-input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+/* ── Config summary ── */
+.wiz-config-summary {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  margin-bottom: 16px;
+}
+
+.wiz-config-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.wiz-config-row:last-child {
+  border-bottom: none;
+}
+
+.wiz-config-label {
+  color: var(--text-dim);
+  font-weight: 500;
+}
+
+.wiz-config-value {
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+/* ── Trigger indicator ── */
+.wiz-trigger-indicator {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 24px;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-md);
+  margin: 8px 0 16px;
+  transition: all 0.3s;
+}
+
+.wiz-trigger-indicator.hit {
+  border-color: var(--green);
+  background: var(--green-soft);
+  animation: wiz-pulse 0.6s ease;
+}
+
+@keyframes wiz-pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.03); }
+  100% { transform: scale(1); }
+}
+
+.wiz-trigger-icon {
+  font-size: 28px;
+}
+
+.wiz-trigger-text {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.wiz-trigger-count {
+  font-size: 11px;
+  color: var(--green);
+  font-family: var(--mono);
+  margin-left: auto;
+}
+
+.wiz-tip {
+  font-size: 11px;
+  color: var(--text-dim);
+  text-align: center;
+  margin: 8px 0;
+  line-height: 1.5;
+}
+
+/* ── Done step ── */
+.wiz-done-icon {
+  font-size: 48px;
+  margin-bottom: 8px;
+}
+
+.wiz-done-actions {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+/* ── Navigation ── */
+.wiz-nav {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.wiz-next {
+  padding: 8px 20px !important;
+  font-weight: 600 !important;
+}
+
+.wiz-next:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.wiz-create {
+  background: var(--green) !important;
+  border-color: var(--green) !important;
+  color: #000 !important;
+}
+
+.wiz-create:hover {
+  opacity: 0.9;
+}
+
+.wiz-back {
+  background: transparent !important;
+  border: 1px solid var(--border) !important;
+  color: var(--text-dim) !important;
+}
