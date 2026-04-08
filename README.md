@@ -1,4 +1,5 @@
 <div align="center">
+<img width="350" alt="icon" src="https://github.com/user-attachments/assets/9e589865-a6d4-413c-8a7a-fcb6c3bdad91" />
 
 # PiEEG-server
 
