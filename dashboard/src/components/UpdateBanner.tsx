@@ -43,6 +43,14 @@ export default function UpdateBanner() {
         >
           {showHowTo ? "Hide instructions" : "How to update"}
         </button>
+        <a
+          className="btn update-btn update-btn-secondary"
+          href="https://github.com/pieeg-club/PiEEG-server/releases"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Changelog
+        </a>
         <button
           className="update-dismiss"
           onClick={() => setDismissed(true)}

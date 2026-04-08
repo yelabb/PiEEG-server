@@ -1382,6 +1382,13 @@ body {
   opacity: 0.85;
 }
 
+.update-btn-secondary {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--text-dim);
+  text-decoration: none;
+}
+
 .update-dismiss {
   background: none;
   border: none;
