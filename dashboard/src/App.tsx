@@ -75,8 +75,13 @@ export default function App() {
       .catch(() => {});
   }, []);
 
-  // Sync local spike inputs from server
+  // Sync local spike inputs from server (skip if user just toggled)
+  const spikeUserAction = useRef(false);
   useEffect(() => {
+    if (spikeUserAction.current) {
+      spikeUserAction.current = false;
+      return;
+    }
     setSpikeThreshold(eeg.spikeConfig.threshold);
     if (eeg.spikeConfig.threshold > 0) lastSpikeThreshold.current = eeg.spikeConfig.threshold;
     setSpikeResetAfter(eeg.spikeConfig.reset_after);
@@ -534,6 +539,7 @@ export default function App() {
         <button
           className={`btn${spikeEnabled ? " active" : ""}`}
           onClick={() => {
+            spikeUserAction.current = true;
             if (spikeEnabled) {
               lastSpikeThreshold.current = Math.max(1, Number(spikeThreshold));
               setSpikeThreshold(-1);
