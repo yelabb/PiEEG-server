@@ -3,7 +3,7 @@
 
 # PiEEG-server
 
-**Real-time EEG streaming platform for [PiEEG](https://github.com/pieeg-club/PiEEG-16) shields (8/16 ch)**
+**Real-time EEG streaming platform for PiEEG shields (8/[16]((https://github.com/pieeg-club/PiEEG-16)) ch)**
 
 Reads at 250 Hz · streams over WebSocket · live dashboard with spectral analysis, topographic maps, experiences gallery, VRChat OSC, Lab Streaming Layer, webhook automation — all from your Raspberry Pi.
 
