@@ -147,7 +147,9 @@ class PiEEGServer:
             "sample_rate": 250,
             "channels": self._num_channels,
             "filter": self._filter is not None,
+            "mock": self._acq._mock,
             "lsl_status": self._lsl_bridge.status() if self._lsl_bridge else {"running": False},
+            "spike_config": self._get_spike_config(),
         }
         welcome.update(self._get_record_status())
         await ws.send(json.dumps(welcome))
@@ -213,6 +215,11 @@ class PiEEGServer:
             await self._ws_lsl_start(ws, msg)
         elif cmd == "lsl_stop":
             await self._ws_lsl_stop(ws)
+        # ── Spike config commands ──────────────────────────────────────────
+        elif cmd == "spike_config":
+            await self._ws_spike_config(ws, msg)
+        elif cmd == "inject_spike":
+            await self._ws_inject_spike(ws, msg)
 
     async def _start_recording(self):
         """Start recording EEG data to a timestamped CSV file."""
@@ -502,4 +509,47 @@ class PiEEGServer:
             except websockets.ConnectionClosed:
                 stale.add(ws)
         self._clients -= stale
+
+    # ── Spike config ───────────────────────────────────────────────────
+
+    def _get_spike_config(self) -> dict:
+        hw = self._acq._hw
+        return {
+            "threshold": hw.spike_threshold,
+            "reset_after": hw.spike_reset_after,
+        }
+
+    async def _ws_spike_config(self, ws, msg: dict):
+        """Get or set spike rejection parameters."""
+        hw = self._acq._hw
+        config = msg.get("config")
+        if config and isinstance(config, dict):
+            if "threshold" in config:
+                hw.spike_threshold = int(config["threshold"])
+            if "reset_after" in config:
+                hw.spike_reset_after = int(config["reset_after"])
+            logger.info("Spike config updated: threshold=%d, reset_after=%d",
+                        hw.spike_threshold, hw.spike_reset_after)
+        await self._broadcast_spike_config()
+
+    async def _broadcast_spike_config(self):
+        """Push current spike config to all connected clients."""
+        payload = json.dumps({"spike_config": self._get_spike_config()})
+        stale = set()
+        for ws in list(self._clients):
+            try:
+                await ws.send(payload)
+            except websockets.ConnectionClosed:
+                stale.add(ws)
+        self._clients -= stale
+
+    async def _ws_inject_spike(self, ws, msg: dict):
+        """Inject synthetic spike(s) into the mock data stream (mock mode only)."""
+        if not self._acq._mock:
+            await ws.send(json.dumps({"inject_spike": {"ok": False, "error": "Only available in mock mode"}}))
+            return
+        count = max(1, int(msg.get("count", 1)))
+        self._acq._hw.inject_spike(count)
+        logger.info("Injected %d synthetic spike(s)", count)
+        await ws.send(json.dumps({"inject_spike": {"ok": True, "count": count}}))
 

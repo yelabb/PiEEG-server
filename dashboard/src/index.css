@@ -1040,6 +1040,19 @@ body {
   color: #22d3ee;
 }
 
+.btn-inject-spike {
+  border-color: rgba(251, 146, 60, 0.4);
+  color: #fb923c;
+  font-weight: 600;
+}
+.btn-inject-spike:hover {
+  background: rgba(251, 146, 60, 0.12);
+  border-color: rgba(251, 146, 60, 0.7);
+}
+.btn-inject-spike:active {
+  background: rgba(251, 146, 60, 0.25);
+}
+
 .xr-overlay {
   position: fixed;
   inset: 0;

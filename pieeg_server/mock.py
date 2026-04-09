@@ -29,21 +29,53 @@ class MockHardware:
         self._alpha_freq = [random.uniform(9, 11) for _ in range(self._num_channels)]
         self._alpha_phase = [random.uniform(0, 2 * math.pi) for _ in range(self._num_channels)]
         self._noise_amp = [random.uniform(5, 20) for _ in range(self._num_channels)]
+        # Spike config (mirrors PiEEGHardware interface)
+        self._spike_threshold = 5000
+        self._spike_reset_after = 50
 
     @property
     def num_channels(self) -> int:
         return self._num_channels
 
+    @property
+    def spike_threshold(self) -> int:
+        return self._spike_threshold
+
+    @spike_threshold.setter
+    def spike_threshold(self, value: int):
+        self._spike_threshold = max(0, int(value))
+
+    @property
+    def spike_reset_after(self) -> int:
+        return self._spike_reset_after
+
+    @spike_reset_after.setter
+    def spike_reset_after(self, value: int):
+        self._spike_reset_after = max(1, int(value))
+
     def open(self):
         self._start_time = time.time()
         self._sample_index = 0
+        self._pending_spikes = 0
 
     def close(self):
         pass
 
+    def inject_spike(self, count: int = 1):
+        """Queue synthetic spike(s) into upcoming samples."""
+        self._pending_spikes += max(1, int(count))
+
     def read_sample(self):
         t = self._sample_index / SAMPLE_RATE
         self._sample_index += 1
+
+        # Inject a large spike across all channels if requested
+        if self._pending_spikes > 0:
+            self._pending_spikes -= 1
+            amplitude = random.uniform(800, 1500)
+            sign = random.choice([-1, 1])
+            return [round(sign * amplitude + random.gauss(0, 5), 2)
+                    for _ in range(self._num_channels)]
 
         channels = []
         for ch in range(self._num_channels):
