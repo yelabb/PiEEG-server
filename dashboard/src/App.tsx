@@ -16,6 +16,7 @@ import ShortcutHelp from "./components/ShortcutHelp";
 import ChatPanel from "./components/ChatPanel";
 import WebhookPanel from "./components/WebhookPanel";
 import ExperiencesPage from "./components/ExperiencesPage";
+import UpdatePage from "./components/UpdatePage";
 import { useWebhooks } from "./hooks/useWebhooks";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { NUM_CHANNELS } from "./types";
@@ -25,7 +26,7 @@ import type { SelectOption, GuidedPreset } from "./types";
 const DEFAULT_MOBILE = new Set([0, 1, 2, 3]);
 const isDemo = !!import.meta.env.VITE_SERVER_URL;
 
-type ViewState = "live" | "sessions" | "playback" | "experiences";
+type ViewState = "live" | "sessions" | "playback" | "experiences" | "update";
 
 const SCALE_OPTIONS: SelectOption<number>[] = [
   { value: 50, label: "±50 µV" },
@@ -234,6 +235,7 @@ export default function App() {
           if (view === "playback") { setView("sessions"); setSelectedSession(null); }
           else if (view === "sessions") setView("live");
           else if (view === "experiences") setView("live");
+          else if (view === "update") setView("live");
         }
         return;
       }
@@ -320,12 +322,22 @@ export default function App() {
     );
   }
 
+  if (view === "update") {
+    return (
+      <AuthGate>
+        <ErrorBoundary>
+          <UpdatePage onBack={() => setView("live")} />
+        </ErrorBoundary>
+      </AuthGate>
+    );
+  }
+
   // Suspend grid RAF loops while expanded overlay covers them
   eeg.data.gridSuspended = expandedCh !== null && activeChannels.has(expandedCh);
 
   return (
     <AuthGate>
-      <UpdateBanner />
+      <UpdateBanner onGoToUpdate={() => setView("update")} />
       {/* Header */}
       <header className="header">
         <h1>

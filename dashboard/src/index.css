@@ -1446,6 +1446,184 @@ body {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
+   Update Page
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.update-page {
+  max-width: 720px;
+  margin: 40px auto;
+  padding: 0 20px;
+}
+
+.update-page-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.update-page-header h2 {
+  flex: 1;
+  margin: 0;
+  font-size: 20px;
+  color: var(--text);
+}
+
+/* Stepper */
+.update-stepper {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-bottom: 32px;
+  padding: 16px 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.update-step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-dim);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.update-step.current { color: var(--accent-light); font-weight: 600; }
+.update-step.done { color: var(--green); }
+.update-step.error { color: var(--red); }
+
+.update-step-icon {
+  font-size: 16px;
+  width: 20px;
+  text-align: center;
+}
+
+.update-step-line {
+  flex: 0 0 32px;
+  height: 1px;
+  background: var(--border);
+  margin: 0 8px;
+}
+
+.update-step.done + .update-step .update-step-line,
+.update-step.done .update-step-line {
+  background: var(--green);
+}
+
+/* Log / detail area */
+.update-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 24px;
+  min-height: 60px;
+}
+
+.update-log-entry {
+  font-size: 13px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-dim);
+}
+
+.update-log-entry strong {
+  color: var(--text);
+  margin-right: 6px;
+}
+
+.update-log-running { border-color: var(--accent-border); }
+.update-log-done { border-color: var(--green); }
+.update-log-done strong { color: var(--green); }
+.update-log-error { border-color: var(--red); color: var(--red); }
+.update-log-error strong { color: var(--red); }
+
+/* Actions */
+.update-actions {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 32px;
+}
+
+/* Doctor / Troubleshoot panel */
+.update-doctor {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 16px;
+  margin-top: 16px;
+}
+
+.update-doctor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.update-doctor-close {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 16px;
+  padding: 2px 6px;
+  border-radius: var(--radius-xs);
+}
+
+.update-doctor-close:hover { color: var(--text); }
+
+.update-doctor-loading {
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.update-doctor-summary {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.doc-ok { color: var(--green); }
+.doc-warn { color: var(--yellow, #d29922); }
+.doc-fail { color: var(--red); }
+
+.update-doctor-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.doc-check {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+  padding: 4px 0;
+  color: var(--text-dim);
+}
+
+.doc-check-ok .doc-icon { color: var(--green); }
+.doc-check-warn .doc-icon { color: var(--yellow, #d29922); }
+.doc-check-fail .doc-icon { color: var(--red); }
+
+.doc-icon { width: 16px; text-align: center; flex-shrink: 0; }
+.doc-cat {
+  font-weight: 600;
+  color: var(--text);
+  min-width: 100px;
+  flex-shrink: 0;
+}
+.doc-msg { color: var(--text-dim); }
+
+/* ═══════════════════════════════════════════════════════════════════════
    Channel Detail Panel
    ═══════════════════════════════════════════════════════════════════════ */
 

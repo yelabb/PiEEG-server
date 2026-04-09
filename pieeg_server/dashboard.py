@@ -27,7 +27,7 @@ from urllib.parse import parse_qs, urlparse
 from .auth import AuthManager, COOKIE_NAME
 import subprocess
 
-from .updater import check_update
+from .updater import check_update, apply_update, restart_server, run_doctor_json
 from . import __version__
 
 logger = logging.getLogger("pieeg.dashboard")
@@ -207,6 +207,8 @@ def _make_handler(static_dir: Path, auth: AuthManager):
                 # --- Update API routes ---
                 if self.path == "/api/update/check":
                     return self._api_update_check()
+                if self.path == "/api/update/doctor":
+                    return self._api_update_doctor()
 
                 # Download recorded CSV files
                 if self.path.startswith("/recordings/"):
@@ -338,6 +340,41 @@ def _make_handler(static_dir: Path, auth: AuthManager):
                 return self._send_json({"error": "Update check timed out"}, 504)
             return self._send_json(result)
 
+        def _api_update_apply(self):
+            """POST /api/update/apply — pull latest code and reinstall."""
+            import threading
+            result = {}
+            error = [None]
+            def _apply():
+                try:
+                    result.update(apply_update())
+                except Exception as e:
+                    error[0] = str(e)
+            t = threading.Thread(target=_apply)
+            t.start()
+            t.join(timeout=180)
+            if error[0]:
+                return self._send_json({"error": error[0]}, 500)
+            if not result:
+                return self._send_json({"error": "Update timed out"}, 504)
+            return self._send_json(result)
+
+        def _api_update_restart(self):
+            """POST /api/update/restart — restart the server process."""
+            try:
+                result = restart_server()
+            except Exception as e:
+                return self._send_json({"error": str(e)}, 500)
+            return self._send_json(result)
+
+        def _api_update_doctor(self):
+            """GET /api/update/doctor — run diagnostic checks."""
+            try:
+                result = run_doctor_json()
+            except Exception as e:
+                return self._send_json({"error": str(e)}, 500)
+            return self._send_json(result)
+
         def _api_save_annotations(self):
             """POST /api/recordings/annotations/{filename} — save annotations."""
             filename = self._safe_recording_filename()
@@ -367,6 +404,12 @@ def _make_handler(static_dir: Path, auth: AuthManager):
                 # Annotation save route
                 if self.path.startswith("/api/recordings/annotations/"):
                     return self._api_save_annotations()
+
+                # --- Update API routes (POST) ---
+                if self.path == "/api/update/apply":
+                    return self._api_update_apply()
+                if self.path == "/api/update/restart":
+                    return self._api_update_restart()
 
                 if self.path != "/auth":
                     self.send_error(404)

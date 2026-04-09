@@ -1,11 +1,10 @@
 import { useState, useEffect } from "react";
 import type { UpdateInfo } from "../types";
 
-export default function UpdateBanner() {
+export default function UpdateBanner({ onGoToUpdate }: { onGoToUpdate?: () => void }) {
   const [info, setInfo] = useState<UpdateInfo | null>(null);
   const [ready, setReady] = useState(false);
   const [dismissed, setDismissed] = useState(false);
-  const [showHowTo, setShowHowTo] = useState(false);
 
   useEffect(() => {
     fetch("/api/update/check")
@@ -19,17 +18,6 @@ export default function UpdateBanner() {
 
   if (dismissed || !ready || !info?.update_available) return null;
 
-  const isGit = info.install_method === "git";
-  const isWin = /win/i.test(navigator.platform);
-
-  const updateCmd = isGit
-    ? `git pull origin main\npip install -e .`
-    : `pip install --upgrade pieeg-server`;
-
-  const restartCmd = isWin
-    ? `.\\pieeg-server.cmd`
-    : `pieeg-server`;
-
   return (
     <div className="update-banner">
       <div className="update-banner-content">
@@ -37,12 +25,11 @@ export default function UpdateBanner() {
           Update available: <strong>{info.current_version}</strong> →{" "}
           <strong>{info.latest_version}</strong>
         </span>
-        <button
-          className="btn update-btn"
-          onClick={() => setShowHowTo((v) => !v)}
-        >
-          {showHowTo ? "Hide instructions" : "How to update"}
-        </button>
+        {onGoToUpdate && (
+          <button className="btn update-btn" onClick={onGoToUpdate}>
+            Update now
+          </button>
+        )}
         <a
           className="btn update-btn update-btn-secondary"
           href="https://github.com/pieeg-club/PiEEG-server/releases"
@@ -59,18 +46,6 @@ export default function UpdateBanner() {
           ✕
         </button>
       </div>
-      {showHowTo && (
-        <div className="update-howto">
-          <p>
-            {isGit
-              ? "Run these commands in your project folder:"
-              : "Run this command:"}
-          </p>
-          <pre><code>{updateCmd}</code></pre>
-          <p>Then restart the server:</p>
-          <pre><code>{restartCmd}</code></pre>
-        </div>
-      )}
     </div>
   );
 }
