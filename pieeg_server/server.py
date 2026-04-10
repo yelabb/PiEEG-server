@@ -578,7 +578,8 @@ class PiEEGServer:
             return
         reg_map = {int(k, 16) if isinstance(k, str) else int(k): int(v) & 0xFF
                    for k, v in raw_regs.items()}
-        self._acq.restart_with_config(reg_map)
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, self._acq.restart_with_config, reg_map)
         logger.info("Registers written: %s", {hex(k): hex(v) for k, v in reg_map.items()})
         await self._broadcast_reg_config()
 
@@ -593,7 +594,8 @@ class PiEEGServer:
                 "available": list(self._REG_PRESETS.keys()),
             }}))
             return
-        self._acq.restart_with_config(dict(reg_map))
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, self._acq.restart_with_config, dict(reg_map))
         logger.info("Register preset applied: %s", preset_name)
         await self._broadcast_reg_config()
 
@@ -618,7 +620,8 @@ class PiEEGServer:
 
         # 2. Set internal short (0x01 on all CHnSET)
         short_regs = {r: 0x01 for r in range(0x05, 0x0D)}
-        self._acq.restart_with_config(short_regs)
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, self._acq.restart_with_config, short_regs)
 
         # 3. Discard first 0.5s (settling time)
         settle_samples = int(0.5 * 250)
@@ -656,10 +659,10 @@ class PiEEGServer:
 
         # 6. Restore original config + restart
         if saved_config:
-            self._acq.restart_with_config(saved_config)
+            await loop.run_in_executor(None, self._acq.restart_with_config, saved_config)
         else:
             normal_regs = {r: 0x00 for r in range(0x05, 0x0D)}
-            self._acq.restart_with_config(normal_regs)
+            await loop.run_in_executor(None, self._acq.restart_with_config, normal_regs)
 
         # 7. Build verdict and recommendation
         max_rms = max(rms_values) if rms_values else 0

@@ -41,6 +41,7 @@ export default function RegisterPanel({
   sendCommand,
 }: RegisterPanelProps) {
   const chCount = Math.min(numChannels, NUM_CH_REGS);
+  const is16ch = numChannels > 8;
   const [chValues, setChValues] = useState<number[]>(() =>
     Array(NUM_CH_REGS).fill(0x00)
   );
@@ -89,6 +90,7 @@ export default function RegisterPanel({
       if (preset) {
         setChValues(Array(NUM_CH_REGS).fill(preset.value));
       }
+      setNoiseResult(null);
     },
     [sendCommand]
   );
@@ -108,6 +110,7 @@ export default function RegisterPanel({
       regs[`0x${(CH_REG_BASE + i).toString(16).padStart(2, "0")}`] = chValues[i];
     }
     sendCommand({ cmd: "reg_write", regs });
+    setNoiseResult(null);
   }, [chValues, chCount, sendCommand]);
 
   const handleNoiseTest = useCallback(() => {
@@ -130,7 +133,7 @@ export default function RegisterPanel({
   return (
     <div className="register-panel">
       <div className="register-panel-header">
-        <strong>ADS1299 Registers</strong>
+        <strong>ADS1299 Registers{is16ch ? " (×2 chips)" : ""}</strong>
         <button className="register-panel-close" onClick={onClose}>
           ✕
         </button>
@@ -156,7 +159,7 @@ export default function RegisterPanel({
           {Array.from({ length: chCount }, (_, i) => (
             <div key={i} className="register-ch-row">
               <span className="register-ch-label">
-                CH{i + 1}SET:
+                CH{i + 1}{is16ch ? `+${i + 9}` : ""}SET:
               </span>
               <select
                 value={chValues[i]}

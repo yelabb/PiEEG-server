@@ -324,8 +324,8 @@ class TestMockRegisterConfig:
         hw.open()
 
         hw.set_input_short()
-        assert hw._input_mode == "shorted"
-        # All CH regs should be 0x01
+        # All channels should be in shorted mode (0x01)
+        assert all(m == 0x01 for m in hw._ch_modes[:8])
         for reg in hw.CH_REGS:
             assert hw.register_state.get(reg) == 0x01
 
@@ -336,7 +336,7 @@ class TestMockRegisterConfig:
 
         hw.set_input_short()
         hw.set_input_normal()
-        assert hw._input_mode == "normal"
+        assert all(m == 0x00 for m in hw._ch_modes[:8])
         for reg in hw.CH_REGS:
             assert hw.register_state.get(reg) == 0x00
 
@@ -385,6 +385,67 @@ class TestMockRegisterConfig:
         state = hw.register_state
         state[0x05] = 0xFF
         assert hw.register_state[0x05] == 0x01
+
+    def test_per_channel_mode_individual(self):
+        """Individual channel register changes affect only that channel."""
+        from pieeg_server.mock import MockHardware
+        hw = MockHardware(num_channels=8)
+        hw.open()
+
+        # Set only CH1 to shorted, rest stay normal
+        hw.configure_registers({0x05: 0x01})
+        assert hw._ch_modes[0] == 0x01  # CH1 shorted
+        assert hw._ch_modes[1] == 0x00  # CH2 still normal
+
+    def test_test_signal_mode_produces_square_wave(self):
+        """Test signal mode should produce large ±1800 µV values."""
+        from pieeg_server.mock import MockHardware
+        hw = MockHardware(num_channels=8)
+        hw.open()
+
+        hw.configure_registers({0x05: 0x05})  # CH1 = test signal
+        samples = [hw.read_sample()[0] for _ in range(250)]
+        # Test signal alternates ±1800, check amplitude is large
+        assert max(abs(v) for v in samples) > 1000
+
+    def test_16ch_mirror_registers(self):
+        """On 16-channel mock, CHnSET registers mirror to channels 9-16."""
+        from pieeg_server.mock import MockHardware
+        hw = MockHardware(num_channels=16)
+        hw.open()
+
+        hw.set_input_short()
+        # Channels 0-7 AND 8-15 should all be shorted
+        assert all(m == 0x01 for m in hw._ch_modes)
+
+        hw.set_input_normal()
+        assert all(m == 0x00 for m in hw._ch_modes)
+
+    def test_16ch_individual_register_mirrors(self):
+        """Setting CH1SET on 16ch affects ch0 AND ch8."""
+        from pieeg_server.mock import MockHardware
+        hw = MockHardware(num_channels=16)
+        hw.open()
+
+        hw.configure_registers({0x05: 0x05})  # CH1SET = test signal
+        assert hw._ch_modes[0] == 0x05   # ch1
+        assert hw._ch_modes[8] == 0x05   # ch9 (mirror)
+        assert hw._ch_modes[1] == 0x00   # ch2 unchanged
+        assert hw._ch_modes[9] == 0x00   # ch10 unchanged
+
+    def test_16ch_shorted_produces_low_noise_all_channels(self):
+        """16-channel shorted mode: all 16 channels should have low noise."""
+        import statistics
+        from pieeg_server.mock import MockHardware
+        hw = MockHardware(num_channels=16)
+        hw.open()
+        hw.set_input_short()
+
+        samples = [hw.read_sample() for _ in range(500)]
+        for ch in range(16):
+            values = [s[ch] for s in samples]
+            rms = statistics.stdev(values)
+            assert rms < 5, f"Channel {ch} RMS {rms} too high for shorted 16ch mode"
 
 
 class TestAcquisitionRestartWithConfig:
