@@ -82,8 +82,7 @@ SPI_MODE = 0b01
 SPI_BITS = 8
 BYTES_PER_READ = 27  # 3 status + 8 channels * 3 bytes
 
-# --- Expected status header from ADC chips ---
-EXPECTED_STATUS_1 = (192, 0, 0)  # 0xC0, 0x00, 0x00 — chip 1
+# --- Expected status header from ADC chip 2 ---
 EXPECTED_STATUS_2 = (192, 0, 8)  # 0xC0, 0x00, 0x08 — chip 2 (GPIO bit set)
 
 # --- Spike detection defaults (matches not_spike script) ---
@@ -200,8 +199,8 @@ class PiEEGHardware:
         raw1 = self._spi1.readbytes(BYTES_PER_READ)
 
         if self._num_channels == 16:
-            # Validate status bytes from chip 1
-            if (raw1[0], raw1[1], raw1[2]) != EXPECTED_STATUS_1:
+            # Spike detection on chip 1 (bytes 24-26 = last channel)
+            if not self._is_valid_frame(raw1):
                 return None
 
             # Wait for chip 2 DRDY falling edge before reading
@@ -214,7 +213,7 @@ class PiEEGHardware:
             if (raw2[0], raw2[1], raw2[2]) != EXPECTED_STATUS_2:
                 return None
 
-            # Spike detection: check last channel of chip 2 (bytes 24-26)
+            # Spike detection on chip 2 (bytes 24-26 = last channel)
             if not self._is_valid_frame(raw2):
                 return None
 
