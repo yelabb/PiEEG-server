@@ -565,7 +565,7 @@ export default function App() {
             }
           }}
         >
-          Spike: {spikeEnabled ? "ON" : "OFF"}
+          Spike Filter: {spikeEnabled ? "ON" : "OFF"}
         </button>
         <div className="control-group">
           <label>Spike</label>
