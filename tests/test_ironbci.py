@@ -143,7 +143,7 @@ class TestIronBCIHardwareInterface:
         assert hw.num_channels == 16
 
     def test_invalid_channel_count(self):
-        with pytest.raises(ValueError, match="num_channels must be 8 or 16"):
+        with pytest.raises(ValueError, match="IronBCI supports 8 channels only"):
             IronBCIHardware(num_channels=4)
 
     def test_read_sample_empty_buffer(self):
