@@ -107,10 +107,28 @@ class IronBCIHardware:
         self._buffer: list[list[float]] = []
         self._loop: asyncio.AbstractEventLoop | None = None
         self._connected = False
+        self._spike_threshold = 5000
+        self._spike_reset_after = 50
 
     @property
     def num_channels(self) -> int:
         return self._num_channels
+
+    @property
+    def spike_threshold(self) -> int:
+        return self._spike_threshold
+
+    @spike_threshold.setter
+    def spike_threshold(self, value: int):
+        self._spike_threshold = max(0, int(value))
+
+    @property
+    def spike_reset_after(self) -> int:
+        return self._spike_reset_after
+
+    @spike_reset_after.setter
+    def spike_reset_after(self, value: int):
+        self._spike_reset_after = max(1, int(value))
 
     def open(self):
         """Placeholder — actual BLE connection happens in start_async()."""
