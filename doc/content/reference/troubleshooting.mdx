@@ -54,11 +54,21 @@ kill $(lsof -t -i:1616)
 
 **Symptoms:** Dashboard shows flat lines or no frames.
 
-**Check:**
+#### PiEEG (SPI)
+
 1. Shield properly seated on GPIO header
 2. Electrodes connected
 3. Correct device flag: `--device pieeg8` or `--device pieeg16`
 4. Run `pieeg-server doctor` for hardware diagnostics
+
+#### IronBCI / EAREEG (Bluetooth LE)
+
+1. Bluetooth adapter enabled: `bluetoothctl show` should list a controller
+2. Device powered on and in range
+3. Correct flags: `--device ironbci8` (optionally `--ble-name` or `--ble-address`)
+4. BLE extra installed: `pip install pieeg-server[ironbci]`
+5. If scan times out, try passing the MAC address directly with `--ble-address`
+6. On Linux, ensure your user has permissions for Bluetooth (or run with `sudo`)
 
 ### Dashboard not loading
 

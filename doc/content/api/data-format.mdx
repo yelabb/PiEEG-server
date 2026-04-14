@@ -17,7 +17,7 @@ Every frame from the WebSocket is a JSON object:
 |-------|------|-------------|
 | `t` | `float` | Unix timestamp (seconds, 6-decimal precision) |
 | `n` | `int` | Sample number (monotonic, incremental) |
-| `channels` | `float[]` | µV per channel (8 or 16 elements) |
+| `channels` | `float[]` | µV per channel — 8 elements for `pieeg8` / `ironbci8`, 16 for `pieeg16` (default) |
 
 ## Frequency Bands
 

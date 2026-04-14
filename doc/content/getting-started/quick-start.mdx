@@ -65,8 +65,9 @@ Every frame is plain JSON — no SDK, no binary protocol, works in any language 
 ## Common Launch Modes
 
 ```bash
-pieeg-server                        # stream 16 ch
+pieeg-server                        # stream 16 ch (default)
 pieeg-server --device pieeg8        # 8-channel shield
+pieeg-server --device ironbci8      # IronBCI / EAREEG via Bluetooth LE
 pieeg-server --filter               # 1–40 Hz bandpass
 pieeg-server --monitor              # terminal sparklines
 pieeg-server --mock                 # synthetic data, no hardware
@@ -74,3 +75,15 @@ pieeg-server --auth                 # require 6-digit access code
 pieeg-server --osc                  # VRChat OSC bridge
 pieeg-server --lsl                  # Lab Streaming Layer outlet
 ```
+
+### IronBCI / EAREEG
+
+```bash
+pieeg-server --device ironbci8                       # auto-scan for EAREEG device
+pieeg-server --device ironbci8 --ble-name MyBoard    # custom BLE device name
+pieeg-server --device ironbci8 --ble-address A1:B2:C3:D4:E5:F6  # skip scan
+```
+
+<Callout type="info">
+  IronBCI requires the BLE extra: `pip install pieeg-server[ironbci]`. No SPI or GPIO needed — works on any platform with Bluetooth.
+</Callout>

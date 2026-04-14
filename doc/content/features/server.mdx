@@ -8,7 +8,7 @@ description: Core streaming server capabilities — 250 Hz EEG, filtering, authe
 | Feature | Description |
 |---------|-------------|
 | **250 Hz streaming** | WebSocket (`ws://<host>:1616`), plain JSON, language-agnostic |
-| **8 & 16 channel** | Auto-adapts to PiEEG-8 or PiEEG-16 shields |
+| **8 & 16 channel** | PiEEG-8 / PiEEG-16 shields (SPI) and IronBCI / EAREEG headsets (8 ch, Bluetooth LE) |
 | **Bandpass filter** | Butterworth IIR (SOS), per-channel state, adjustable live via WebSocket |
 | **CSV recording** | Start/stop from dashboard or CLI; auto-timestamped; optional duration limit |
 | **Session annotations** | Text notes on any frame; sidecar `.annotations.json` |
@@ -28,7 +28,8 @@ description: Core streaming server capabilities — 250 Hz EEG, filtering, authe
 ## Architecture
 
 ```
-hardware.py     → SPI/GPIO init, ADS1299 config
+hardware.py     → SPI/GPIO init, ADS1299 config (PiEEG)
+ironbci.py      → BLE scan, GATT notifications, ADS1299 parsing (IronBCI)
      ↓
 acquisition.py  → 250 Hz read loop (background thread)
      ↓ pub/sub
@@ -48,7 +49,7 @@ doctor.py    → system diagnostics
 
 ## Data Flow
 
-1. **Hardware/Mock** → **AcquisitionLoop** (threaded, 250 Hz)
+1. **Hardware/Mock/BLE** → **AcquisitionLoop** (threaded, 250 Hz)
 2. Each sample: 8 or 16 channels of float values in µV
 3. Subscription-based queue system — each subscriber gets its own `asyncio.Queue`
 4. Subscribers: WebSocket server, recorder, monitor, OSC, LSL
