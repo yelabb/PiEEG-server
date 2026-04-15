@@ -9,8 +9,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useRef, useCallback } from "react";
-import type { EEGData, BandPowers } from "../types";
-import { NUM_CHANNELS, SAMPLE_RATE } from "../types";
+import type { EEGData } from "../types";
+import { SAMPLE_RATE } from "../types";
 import { FftEngine, FREQUENCY_BANDS } from "../lib/fftEngine";
 import { buildVideoContext, type VideoContextData } from "./useVideoContext";
 
@@ -80,7 +80,7 @@ function buildEEGContext(eegData: EEGData): string {
     }
   }
 
-  lines.push(`\nChannels: ${activeCh}/${NUM_CHANNELS} active, ${SAMPLE_RATE} Hz sample rate`);
+  lines.push(`\nChannels: ${activeCh}/${nCh} active, ${SAMPLE_RATE} Hz sample rate`);
   return lines.join("\n");
 }
 
