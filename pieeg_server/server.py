@@ -53,6 +53,7 @@ class PiEEGServer:
         self._num_channels = num_channels
         self._clients: set[websockets.WebSocketServerProtocol] = set()
         self._filter: MultichannelFilter | None = None
+        self.enable_filter()  # filter on by default
         self._queue = acquisition.subscribe()
         self._recorder: Recorder | None = None
         self._recorder_task: asyncio.Task | None = None

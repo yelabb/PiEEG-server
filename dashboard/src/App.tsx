@@ -48,7 +48,7 @@ export default function App() {
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
   const [paused, setPaused] = useState(false);
   const [showFFT, setShowFFT] = useState(true);
-  const [filterEnabled, setFilterEnabled] = useState(false);
+  const [filterEnabled, setFilterEnabled] = useState(true);
   const [lowcut, setLowcut] = useState<number | string>(1);
   const [highcut, setHighcut] = useState<number | string>(40);
   const [timeWindow, setTimeWindow] = useState(4);
