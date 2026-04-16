@@ -615,6 +615,56 @@ export default function App() {
             ⚡ Inject Spike
           </button>
         )}
+        <div className="sep" />
+        <button
+          className={`btn${eeg.hampelConfig.enabled ? " active" : ""}`}
+          onClick={() => {
+            const next = !eeg.hampelConfig.enabled;
+            eeg.sendCommand({ cmd: "hampel_config", config: { enabled: next } });
+          }}
+          title="Hampel filter: per-channel median-based spike replacement (works across all devices)"
+        >
+          Hampel: {eeg.hampelConfig.enabled ? "ON" : "OFF"}
+        </button>
+        <div className="control-group">
+          <label>Window</label>
+          <select
+            value={eeg.hampelConfig.window_size}
+            disabled={!eeg.hampelConfig.enabled}
+            title="Sliding window size (samples). Larger = more context but more latency"
+            onChange={(e: ChangeEvent<HTMLSelectElement>) => {
+              eeg.sendCommand({ cmd: "hampel_config", config: { window_size: parseInt(e.target.value) } });
+            }}
+          >
+            <option value={3}>3</option>
+            <option value={5}>5</option>
+            <option value={7}>7</option>
+            <option value={9}>9</option>
+            <option value={11}>11</option>
+          </select>
+        </div>
+        <div className="control-group">
+          <label>σ</label>
+          <select
+            value={eeg.hampelConfig.n_sigma}
+            disabled={!eeg.hampelConfig.enabled}
+            title="Deviation threshold in standard deviations. Lower = more aggressive"
+            onChange={(e: ChangeEvent<HTMLSelectElement>) => {
+              eeg.sendCommand({ cmd: "hampel_config", config: { n_sigma: parseFloat(e.target.value) } });
+            }}
+          >
+            <option value={2}>2.0</option>
+            <option value={2.5}>2.5</option>
+            <option value={3}>3.0</option>
+            <option value={4}>4.0</option>
+            <option value={5}>5.0</option>
+          </select>
+        </div>
+        {eeg.hampelConfig.replaced_count > 0 && (
+          <span className="hampel-badge" title="Total samples replaced by Hampel filter">
+            🛡 {eeg.hampelConfig.replaced_count.toLocaleString()}
+          </span>
+        )}
       </div>
 
       {/* Channel selector */}
