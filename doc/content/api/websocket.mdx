@@ -97,7 +97,7 @@ Configure the hardware delta-threshold spike rejection (SPI boards only):
 
 ```json
 {"cmd": "spike_config"}
-{"cmd": "spike_config", "enabled": true, "threshold": 200}
+{"cmd": "spike_config", "config": {"threshold": 200, "reset_after": 50}}
 ```
 
 ### Hampel Filter
@@ -106,7 +106,7 @@ Device-agnostic per-channel Hampel spike filter (works on all devices):
 
 ```json
 {"cmd": "hampel_config"}
-{"cmd": "hampel_config", "enabled": true, "window_size": 5, "n_sigma": 3.0}
+{"cmd": "hampel_config", "config": {"enabled": true, "window_size": 5, "n_sigma": 3.0}}
 ```
 
 | Field | Type | Default | Description |
