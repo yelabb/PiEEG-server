@@ -1,0 +1,54 @@
+name: Stale branches
+
+on:
+  schedule:
+    - cron: "0 9 * * 1"  # every Monday 09:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write  # needed to delete branches
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Delete branches already merged into main
+        run: |
+          git branch -r --merged origin/main \
+            | grep -v 'origin/main' \
+            | grep -v 'origin/HEAD' \
+            | sed 's|origin/||' \
+            | while read -r branch; do
+                echo "Deleting merged branch: $branch"
+                git push origin --delete "$branch" || true
+              done
+
+      - name: List stale unmerged branches (>60 days)
+        run: |
+          echo "## Stale unmerged branches (no commits in 60+ days)" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          CUTOFF=$(date -d '60 days ago' +%s)
+          FOUND=0
+          for branch in $(git branch -r --no-merged origin/main | grep -v 'origin/HEAD'); do
+            LAST_COMMIT=$(git log -1 --format='%ct' "$branch")
+            if [ "$LAST_COMMIT" -lt "$CUTOFF" ]; then
+              BRANCH_NAME=${branch#origin/}
+              LAST_DATE=$(git log -1 --format='%ci' "$branch")
+              AUTHOR=$(git log -1 --format='%an' "$branch")
+              echo "| \`$BRANCH_NAME\` | $AUTHOR | $LAST_DATE |" >> "$GITHUB_STEP_SUMMARY"
+              FOUND=$((FOUND + 1))
+            fi
+          done
+          if [ "$FOUND" -eq 0 ]; then
+            echo "No stale unmerged branches found." >> "$GITHUB_STEP_SUMMARY"
+          else
+            # prepend table header
+            sed -i "3i | Branch | Author | Last commit |" "$GITHUB_STEP_SUMMARY"
+            sed -i "4i | --- | --- | --- |" "$GITHUB_STEP_SUMMARY"
+          fi
+          echo ""
+          echo "Found $FOUND stale unmerged branches."
