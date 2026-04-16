@@ -105,10 +105,10 @@ class HampelFilter:
     # ── public API ────────────────────────────────────────────────────
 
     def apply(self, channels: list[float]) -> list[float]:
-        """Filter one multi-channel sample in-place.
+        """Filter one multi-channel sample.
 
-        Returns the (possibly modified) channel list.  If the filter is
-        disabled, returns the input unchanged.
+        Returns a new list with spikes replaced by the channel median.
+        If the filter is disabled, returns the original list unchanged.
         """
         if not self._enabled:
             self._push(channels)
