@@ -653,8 +653,8 @@ export default function App({ wsUrl, onDisconnect }: { wsUrl?: string; onDisconn
           <span className="relay-banner-frames">
             {cloud.relayStatus.send_count?.toLocaleString() ?? 0} frames
           </span>
-          <button className="btn relay-banner-stop" onClick={cloud.stopRelay}>
-            Stop
+          <button className="btn relay-banner-stop" onClick={cloud.stopRelay} disabled={cloud.relayStopping}>
+            {cloud.relayStopping ? "Stopping…" : "Stop"}
           </button>
         </div>
       )}

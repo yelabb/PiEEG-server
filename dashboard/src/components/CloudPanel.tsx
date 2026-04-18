@@ -159,8 +159,12 @@ export default function CloudPanel({ open, onClose, cloud }: Props) {
                       </p>
                     </div>
                   )}
-                  <button className="btn cloud-btn-stop" onClick={cloud.stopRelay}>
-                    Stop Relay
+                  <button
+                    className="btn cloud-btn-stop"
+                    onClick={cloud.stopRelay}
+                    disabled={cloud.relayStopping}
+                  >
+                    {cloud.relayStopping ? "Stopping…" : "Stop Relay"}
                   </button>
                 </>
               ) : (

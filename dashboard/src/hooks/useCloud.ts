@@ -44,6 +44,7 @@ export interface UseCloudReturn {
   startRelay: () => Promise<void>;
   stopRelay: () => void;
   relayLoading: boolean;
+  relayStopping: boolean;
   relayElapsed: number;
 }
 
@@ -85,6 +86,7 @@ export function useCloud(
   const [relayStatus, setRelayStatus] = useState<CloudRelayStatus>({ running: false });
   const [relayShareUrl, setRelayShareUrl] = useState<string | null>(null);
   const [relayLoading, setRelayLoading] = useState(false);
+  const [relayStopping, setRelayStopping] = useState(false);
   const [relayElapsed, setRelayElapsed] = useState(0);
   const relayInfoRef = useRef<CloudRelayInfo | null>(null);
   const relayTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -118,6 +120,7 @@ export function useCloud(
       }
     } else {
       setRelayElapsed(0);
+      setRelayStopping(false);
       if (relayTimerRef.current) {
         clearInterval(relayTimerRef.current);
         relayTimerRef.current = null;
@@ -381,6 +384,7 @@ export function useCloud(
   }, [tokens?.access.token, sendCommand]);
 
   const stopRelay = useCallback(() => {
+    setRelayStopping(true);
     sendCommand({ cmd: "cloud_relay_stop" });
     setRelayShareUrl(null);
 
@@ -416,6 +420,7 @@ export function useCloud(
     startRelay,
     stopRelay,
     relayLoading,
+    relayStopping,
     relayElapsed,
   };
 }
