@@ -1,13 +1,9 @@
 import { useState, useCallback, useEffect, type FormEvent, type KeyboardEvent } from "react";
 
-/** Compute the default WS URL the same way useEEG does. */
+const FLY_DEMO_URL = "wss://pieeg-server--mock.fly.dev";
+
+/** Compute the default WS URL from the current page location. */
 function defaultWsUrl(): string {
-  const serverUrl = import.meta.env.VITE_SERVER_URL as string | undefined;
-  if (serverUrl) {
-    const url = new URL(serverUrl);
-    const wsScheme = url.protocol === "https:" ? "wss" : "ws";
-    return `${wsScheme}://${url.host}`;
-  }
   const host = location.hostname || "localhost";
   const port = import.meta.env.DEV ? 1616 : parseInt(location.port || "1617") - 1;
   const scheme = location.protocol === "https:" ? "wss" : "ws";
@@ -95,6 +91,14 @@ export default function SessionLobby({ onConnect }: Props) {
           <span className="lobby-hint">
             Enter your PiEEG server address or use the default
           </span>
+
+          <button
+            className="lobby-btn lobby-btn--demo"
+            type="button"
+            onClick={() => setServerUrl(FLY_DEMO_URL)}
+          >
+            ▶ Use Demo Server
+          </button>
         </div>
 
         {/* ── Join existing ────────────────────────────────── */}

@@ -5066,6 +5066,21 @@ body {
   filter: brightness(1.1);
 }
 
+.lobby-btn--demo {
+  width: 100%;
+  margin-top: 8px;
+  background: transparent;
+  color: var(--cyan);
+  border: 1px dashed var(--cyan);
+  font-size: 13px;
+  padding: 8px 14px;
+}
+
+.lobby-btn--demo:hover {
+  background: rgba(0, 200, 200, 0.08);
+  border-style: solid;
+}
+
 .lobby-btn--primary {
   width: 100%;
   background: var(--surface);

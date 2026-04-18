@@ -27,7 +27,12 @@ import { GUIDED_PRESETS } from "./types";
 import type { SelectOption, GuidedPreset, HampelConfig } from "./types";
 
 const DEFAULT_MOBILE = new Set([0, 1, 2, 3]);
-const isDemo = !!import.meta.env.VITE_SERVER_URL;
+const FLY_DEMO_HOST = "pieeg-server--mock.fly.dev";
+
+function checkIsDemo(wsUrl?: string): boolean {
+  if (!wsUrl) return false;
+  try { return new URL(wsUrl).hostname === FLY_DEMO_HOST; } catch { return false; }
+}
 
 type ViewState = "live" | "sessions" | "playback" | "experiences";
 
@@ -281,6 +286,12 @@ function SpikeRejectionGroup({
 }
 
 export default function App({ wsUrl }: { wsUrl?: string }) {
+  const isDemo = checkIsDemo(wsUrl);
+
+  useEffect(() => {
+    document.title = isDemo ? "PiEEG Demo" : "PiEEG Dashboard";
+  }, [isDemo]);
+
   const [view, setView] = useState<ViewState>("live");
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
   const [paused, setPaused] = useState(false);
@@ -542,7 +553,7 @@ export default function App({ wsUrl }: { wsUrl?: string }) {
   // --- Sessions / Playback views ---
   if (view === "playback" && selectedSession) {
     return (
-      <AuthGate>
+      <AuthGate skipAuth={isDemo}>
         <ErrorBoundary>
           <SessionViewer
             filename={selectedSession}
@@ -555,7 +566,7 @@ export default function App({ wsUrl }: { wsUrl?: string }) {
 
   if (view === "sessions") {
     return (
-      <AuthGate>
+      <AuthGate skipAuth={isDemo}>
         <ErrorBoundary>
           <SessionList
             onSelect={(filename) => { setSelectedSession(filename); setView("playback"); }}
@@ -568,7 +579,7 @@ export default function App({ wsUrl }: { wsUrl?: string }) {
 
   if (view === "experiences") {
     return (
-      <AuthGate>
+      <AuthGate skipAuth={isDemo}>
         <ErrorBoundary>
           <ExperiencesPage
             eegData={eeg.data}
@@ -585,7 +596,7 @@ export default function App({ wsUrl }: { wsUrl?: string }) {
   eeg.data.gridSuspended = expandedCh !== null && activeChannels.has(expandedCh);
 
   return (
-    <AuthGate>
+    <AuthGate skipAuth={isDemo}>
       <UpdateBanner />
       <ChannelMismatchBanner numChannels={numCh} eegData={eeg.data} connected={eeg.connected} />
       {/* Header */}

@@ -4,10 +4,6 @@ import App from "./App";
 import SessionLobby from "./components/SessionLobby";
 import "./index.css";
 
-if (import.meta.env.VITE_SERVER_URL) {
-  document.title = "PiEEG Demo";
-}
-
 function Root() {
   const [wsUrl, setWsUrl] = useState<string | null>(null);
 
