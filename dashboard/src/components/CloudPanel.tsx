@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import type { UseCloudReturn } from "../hooks/useCloud";
+import CloudTerms, { hasAcceptedTerms } from "./CloudTerms";
 
 interface Props {
   open: boolean;
@@ -10,6 +11,9 @@ interface Props {
 export default function CloudPanel({ open, onClose, cloud }: Props) {
   const [otp, setOtp] = useState("");
   const [tab, setTab] = useState<"relay" | "sessions">("relay");
+  const [tosAccepted, setTosAccepted] = useState(hasAcceptedTerms);
+
+  const handleTosAccept = useCallback(() => setTosAccepted(true), []);
 
   if (!open) return null;
 
@@ -20,8 +24,10 @@ export default function CloudPanel({ open, onClose, cloud }: Props) {
         <button className="btn-close" onClick={onClose}>×</button>
       </div>
 
-      {/* ── Auth ─────────────────────────────────────────────────────── */}
-      {!cloud.loggedIn ? (
+      {/* ── Terms of Service gate ────────────────────────────────────── */}
+      {!tosAccepted ? (
+        <CloudTerms onAccept={handleTosAccept} />
+      ) : !cloud.loggedIn ? (
         <div className="cloud-auth">
           {cloud.authStep === "idle" && (
             <>

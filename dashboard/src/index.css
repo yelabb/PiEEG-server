@@ -4450,6 +4450,94 @@ body {
   animation: wh-pulse 2s ease-in-out infinite;
 }
 
+/* Terms of Service */
+
+.cloud-terms {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.cloud-terms-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 12px;
+  color: var(--text);
+}
+
+.cloud-terms-scroll {
+  flex: 1;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  margin-bottom: 14px;
+  max-height: calc(100vh - 200px);
+  background: var(--surface);
+}
+
+.cloud-terms-updated {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  margin: 0 0 14px;
+}
+
+.cloud-terms-scroll section {
+  margin-bottom: 16px;
+}
+
+.cloud-terms-scroll section:last-child {
+  margin-bottom: 0;
+}
+
+.cloud-terms-scroll h4 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 6px;
+}
+
+.cloud-terms-scroll p {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin: 0 0 8px;
+}
+
+.cloud-terms-scroll ul {
+  margin: 0 0 8px;
+  padding-left: 18px;
+}
+
+.cloud-terms-scroll li {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-bottom: 4px;
+}
+
+.cloud-terms-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+  margin-bottom: 12px;
+  user-select: none;
+}
+
+.cloud-terms-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
 /* Auth section */
 
 .cloud-auth {
