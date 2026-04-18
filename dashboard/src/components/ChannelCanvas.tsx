@@ -185,9 +185,15 @@ const ChannelCanvas = memo(function ChannelCanvas({ chIdx, eegData, yRange, expa
       ctx.fillStyle = "#0d1117";
       ctx.fillRect(0, 0, w, h);
 
+      const buf = eegData.buffers.current[chIdx];
+      if (!buf) {
+        rafRef.current = requestAnimationFrame(tick);
+        return;
+      }
+
       const rms = drawChannel(
         ctx, w, h,
-        eegData.buffers.current[chIdx],
+        buf,
         eegData.samplesInBuffer.current,
         wi,
         eegData.bufferSize,

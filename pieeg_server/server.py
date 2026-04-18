@@ -113,16 +113,44 @@ class PiEEGServer:
         logger.info("Webhooks enabled (%d rules loaded)",
                     len(self._webhooks.list_rules()))
 
+    def _cors_headers(self, request) -> Headers:
+        """Build CORS headers reflecting the request Origin."""
+        hdrs = Headers()
+        origin = request.headers.get("Origin", "*")
+        hdrs["Access-Control-Allow-Origin"] = origin
+        hdrs["Access-Control-Allow-Credentials"] = "true"
+        return hdrs
+
     async def _health_check(self, connection, request):
         """Respond to HTTP health checks and /api/info without upgrading."""
+        # Detect non-upgrade (plain HTTP) requests — reject with CORS so
+        # the browser can read the response.  websockets Request has no
+        # .method; we detect plain HTTP by checking the Upgrade header.
+        upgrade = request.headers.get("Upgrade", "")
+        is_plain_http = upgrade.lower() != "websocket"
+
         if request.path == "/health":
             return HTTPResponse(200, "OK", Headers(), b"ok\n")
         if request.path == "/api/info":
             body = json.dumps({"version": __version__, "branch": None}).encode()
-            hdrs = Headers()
+            hdrs = self._cors_headers(request)
             hdrs["Content-Type"] = "application/json"
             hdrs["Access-Control-Allow-Origin"] = "*"
             return HTTPResponse(200, "OK", hdrs, body)
+        if request.path == "/auth/ws-token":
+            hdrs = self._cors_headers(request)
+            hdrs["Content-Type"] = "application/json"
+            if self._auth is None:
+                body = json.dumps({"token": "no-auth"}).encode()
+            else:
+                body = json.dumps({"token": self._auth.create_ws_token()}).encode()
+            return HTTPResponse(200, "OK", hdrs, body)
+
+        # For any other non-upgrade request, reject cleanly instead of
+        # letting websockets fail with a confusing 426.
+        if is_plain_http:
+            hdrs = self._cors_headers(request)
+            return HTTPResponse(400, "Bad Request", hdrs, b"WebSocket upgrade required\n")
 
     async def run(self):
         """Start the WebSocket server and the broadcast loop."""
