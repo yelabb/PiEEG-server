@@ -4372,3 +4372,346 @@ body {
   font-size: 11px;
   padding: 3px 8px;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Cloud Panel
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Cloud toolbar button */
+.btn-cloud {
+  border-color: #0070f3 !important;
+  color: #58a6ff !important;
+  font-weight: 600;
+}
+
+.btn-cloud:hover,
+.btn-cloud.active {
+  background: #0070f3 !important;
+  color: #fff !important;
+}
+
+.btn-cloud.cloud-logged-in {
+  background: rgba(0, 112, 243, 0.15) !important;
+}
+
+.cloud-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 400px;
+  max-width: 92vw;
+  height: 100vh;
+  background: var(--bg);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  z-index: 920;
+  box-shadow: -4px 0 32px rgba(0, 0, 0, 0.4);
+  overflow-y: auto;
+}
+
+.cloud-panel .panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.cloud-panel .panel-header h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.cloud-panel .btn-close {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.cloud-panel .btn-close:hover {
+  color: var(--text);
+}
+
+.cloud-active-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  background: #0070f3;
+  border-radius: 50%;
+  margin-left: 5px;
+  vertical-align: middle;
+  animation: wh-pulse 2s ease-in-out infinite;
+}
+
+/* Auth section */
+
+.cloud-auth {
+  padding: 16px;
+}
+
+.cloud-intro {
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.5;
+  margin: 0 0 14px;
+}
+
+.cloud-label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+
+.cloud-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 10px;
+  border-radius: var(--radius-xs);
+  font-size: 13px;
+  font-family: var(--mono);
+  margin-bottom: 10px;
+  transition: border-color 0.15s;
+}
+
+.cloud-input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.cloud-btn {
+  width: 100%;
+  background: var(--accent) !important;
+  border-color: var(--accent) !important;
+  color: #fff !important;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.cloud-btn:hover {
+  opacity: 0.9;
+}
+
+.cloud-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cloud-btn-secondary {
+  background: var(--surface) !important;
+  border-color: var(--border) !important;
+  color: var(--text) !important;
+  font-size: 12px;
+}
+
+.cloud-btn-secondary:hover {
+  border-color: var(--border-hover) !important;
+}
+
+.cloud-btn-stop {
+  width: 100%;
+  background: #da3633 !important;
+  border-color: #da3633 !important;
+  color: #fff !important;
+  font-weight: 600;
+  margin-top: 10px;
+}
+
+.cloud-error {
+  font-size: 12px;
+  color: #f85149;
+  margin: 8px 0 0;
+}
+
+/* User row */
+
+.cloud-user-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.cloud-user-email {
+  font-size: 13px;
+  color: var(--text);
+  font-family: var(--mono);
+}
+
+/* Tabs */
+
+.cloud-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.cloud-tab {
+  flex: 1;
+  padding: 10px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-dim);
+  font-size: 13px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.cloud-tab:hover {
+  color: var(--text);
+}
+
+.cloud-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* Relay section */
+
+.cloud-relay {
+  padding: 16px;
+}
+
+.cloud-hint {
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.5;
+  margin: 0 0 12px;
+}
+
+.cloud-relay-live {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #3fb950;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.cloud-relay-count {
+  color: var(--text-dim);
+  font-weight: 400;
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.cloud-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.cloud-dot-on {
+  background: #3fb950;
+  box-shadow: 0 0 6px #3fb950;
+  animation: wh-pulse 2s ease-in-out infinite;
+}
+
+.cloud-share {
+  margin-bottom: 10px;
+}
+
+.cloud-share .cloud-input {
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+/* Sessions section */
+
+.cloud-sessions {
+  padding: 16px;
+}
+
+.cloud-sessions-header {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 10px;
+}
+
+.cloud-session-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.cloud-session-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.cloud-session-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.cloud-session-label {
+  display: block;
+  font-weight: 500;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cloud-session-meta {
+  display: block;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-family: var(--mono);
+  margin-top: 2px;
+}
+
+.cloud-session-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.cloud-btn-delete {
+  color: #f85149 !important;
+  border-color: transparent !important;
+  background: none !important;
+}
+
+.cloud-btn-delete:hover {
+  background: rgba(248, 81, 73, 0.15) !important;
+}
+
+/* Upload button in modal */
+
+.modal-btn-upload {
+  padding: 0 18px;
+  height: 34px;
+  background: var(--accent) !important;
+  border-color: var(--accent) !important;
+  color: #fff !important;
+  font-weight: 600;
+}
+
+.modal-btn-upload:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

@@ -16,9 +16,11 @@ import ChannelMismatchBanner from "./components/ChannelMismatchBanner";
 import ShortcutHelp from "./components/ShortcutHelp";
 import ChatPanel from "./components/ChatPanel";
 import WebhookPanel from "./components/WebhookPanel";
+import CloudPanel from "./components/CloudPanel";
 import RegisterPanel from "./components/RegisterPanel";
 import ExperiencesPage from "./components/ExperiencesPage";
 import { useWebhooks } from "./hooks/useWebhooks";
+import { useCloud } from "./hooks/useCloud";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { NUM_CHANNELS } from "./types";
 import { GUIDED_PRESETS } from "./types";
@@ -299,6 +301,7 @@ export default function App() {
   const [showDocs, setShowDocs] = useState(false);
   const [showRegisters, setShowRegisters] = useState(false);
   const [showWebhooks, setShowWebhooks] = useState(false);
+  const [showCloud, setShowCloud] = useState(false);
   const [webhooksEnabled, setWebhooksEnabled] = useState(
     () => localStorage.getItem("pieeg_webhooks_enabled") === "true"
   );
@@ -334,6 +337,7 @@ export default function App() {
   }, []);
 
   const webhooks = useWebhooks(webhooksEnabled, eeg.data, eeg.sendCommand);
+  const cloud = useCloud(eeg.sendCommand);
 
   // ── LSL streaming ───────────────────────────────────────────────────
   const [lslRunning, setLslRunning] = useState(false);
@@ -682,6 +686,13 @@ export default function App() {
           LSL {lslRunning ? "ON" : "OFF"}
         </button>
         <button
+          className={`btn btn-cloud${showCloud ? " active" : ""}${cloud.loggedIn ? " cloud-logged-in" : ""}`}
+          onClick={() => setShowCloud((v) => !v)}
+          title="PiEEG Cloud — stream, upload, manage sessions"
+        >
+          ☁ Cloud{cloud.loggedIn && <span className="cloud-active-dot" />}
+        </button>
+        <button
           className="btn btn-xr"
           onClick={() => setView("experiences")}
           title="Open immersive EEG experiences"
@@ -922,6 +933,18 @@ export default function App() {
               >
                 View Session
               </button>
+              {cloud.loggedIn && (
+                <button
+                  className="btn modal-btn-upload"
+                  disabled={cloud.uploading}
+                  onClick={() => {
+                    const r = eeg.recordResult!;
+                    cloud.uploadSession(r.filename, r.downloadUrl);
+                  }}
+                >
+                  {cloud.uploading ? "Uploading…" : "Upload to Cloud"}
+                </button>
+              )}
               <button
                 className="btn modal-btn-dismiss"
                 onClick={eeg.dismissRecordResult}
@@ -949,6 +972,13 @@ export default function App() {
         webhooks={webhooks}
         webhooksEnabled={webhooksEnabled}
         onToggleEnabled={toggleWebhooksEnabled}
+      />
+
+      {/* Cloud side panel */}
+      <CloudPanel
+        open={showCloud}
+        onClose={() => setShowCloud(false)}
+        cloud={cloud}
       />
 
       {/* Register / Noise diagnostic panel */}

@@ -27,6 +27,7 @@ from websockets.http11 import Response as HTTPResponse
 
 from .acquisition import AcquisitionLoop
 from .auth import AuthManager
+from .cloud_relay import CloudRelayBridge
 from .filters import MultichannelFilter
 from .recorder import Recorder
 from .webhooks import WebhookStore
@@ -64,6 +65,8 @@ class PiEEGServer:
         self._osc_task: asyncio.Task | None = None
         self._lsl_bridge: LSLBridge | None = None
         self._lsl_task: asyncio.Task | None = None
+        self._cloud_relay: CloudRelayBridge | None = None
+        self._cloud_relay_task: asyncio.Task | None = None
         self._noise_test_running = False
 
     def enable_filter(self, lowcut: float = 1.0, highcut: float = 40.0):
@@ -151,6 +154,7 @@ class PiEEGServer:
             "filter": self._filter is not None,
             "mock": self._acq._mock,
             "lsl_status": self._lsl_bridge.status() if self._lsl_bridge else {"running": False},
+            "cloud_relay_status": self._cloud_relay.status() if self._cloud_relay else {"running": False},
             "spike_config": self._get_spike_config(),
             "hampel_config": self._get_hampel_config(),
         }
@@ -218,6 +222,13 @@ class PiEEGServer:
             await self._ws_lsl_start(ws, msg)
         elif cmd == "lsl_stop":
             await self._ws_lsl_stop(ws)
+        # ── Cloud Relay commands ───────────────────────────────────────────
+        elif cmd == "cloud_relay_status":
+            await self._ws_cloud_relay_status(ws)
+        elif cmd == "cloud_relay_start":
+            await self._ws_cloud_relay_start(ws, msg)
+        elif cmd == "cloud_relay_stop":
+            await self._ws_cloud_relay_stop(ws)
         # ── Spike config commands ──────────────────────────────────────────
         elif cmd == "spike_config":
             await self._ws_spike_config(ws, msg)
@@ -532,6 +543,60 @@ class PiEEGServer:
         """Push current LSL status to all connected clients."""
         status = self._lsl_bridge.status() if self._lsl_bridge else {"running": False}
         payload = json.dumps({"lsl_status": status})
+        stale = set()
+        for ws in list(self._clients):
+            try:
+                await ws.send(payload)
+            except websockets.ConnectionClosed:
+                stale.add(ws)
+        self._clients -= stale
+
+    # ── Cloud Relay WebSocket handlers ─────────────────────────────────
+
+    async def _ws_cloud_relay_status(self, ws):
+        """Send current cloud relay status to the requesting client."""
+        status = self._cloud_relay.status() if self._cloud_relay else {"running": False}
+        await ws.send(json.dumps({"cloud_relay_status": status}))
+
+    async def _ws_cloud_relay_start(self, ws, msg: dict):
+        """Start the cloud relay bridge."""
+        upstream_url = msg.get("upstream_url")
+        token = msg.get("token")
+        if not upstream_url or not token:
+            await ws.send(json.dumps({
+                "cloud_relay_status": {"running": False, "error": "Missing upstream_url or token"},
+            }))
+            return
+
+        # Stop existing relay if running
+        if self._cloud_relay_task and not self._cloud_relay_task.done():
+            self._cloud_relay.stop()
+            try:
+                await asyncio.wait_for(self._cloud_relay_task, timeout=2.0)
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                pass
+
+        self._cloud_relay = CloudRelayBridge(self._acq, upstream_url, token)
+        self._cloud_relay_task = asyncio.create_task(self._cloud_relay.run())
+        await asyncio.sleep(0)
+        logger.info("Cloud relay started via WebSocket command")
+        await self._broadcast_cloud_relay_status()
+
+    async def _ws_cloud_relay_stop(self, ws):
+        """Stop the cloud relay bridge."""
+        if self._cloud_relay and self._cloud_relay_task and not self._cloud_relay_task.done():
+            self._cloud_relay.stop()
+            try:
+                await asyncio.wait_for(self._cloud_relay_task, timeout=2.0)
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                pass
+            logger.info("Cloud relay stopped via WebSocket command")
+        await self._broadcast_cloud_relay_status()
+
+    async def _broadcast_cloud_relay_status(self):
+        """Push current cloud relay status to all connected clients."""
+        status = self._cloud_relay.status() if self._cloud_relay else {"running": False}
+        payload = json.dumps({"cloud_relay_status": status})
         stale = set()
         for ws in list(self._clients):
             try:

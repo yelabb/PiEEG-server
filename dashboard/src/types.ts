@@ -351,3 +351,41 @@ export const GUIDED_PRESETS: GuidedPreset[] = [
     ],
   },
 ];
+
+// ── Cloud types ──────────────────────────────────────────────────────────
+
+export interface CloudTokens {
+  access: { token: string; expires: string };
+  refresh: { token: string; expires: string };
+}
+
+export interface CloudSession {
+  id: string;
+  label: string;
+  channels: number;
+  sampleRate: number;
+  duration?: number;
+  fileBytes?: number;
+  tags: string[];
+  visibility: "private" | "public";
+  uploadUrl?: string;
+  createdAt: string;
+}
+
+export interface CloudRelayInfo {
+  relayId: string;
+  upstreamUrl: string;
+  shareUrl: string;
+}
+
+export interface CloudRelayStatus {
+  running: boolean;
+  upstream_url?: string;
+  send_count?: number;
+  last_send?: number;
+  error?: string | null;
+}
+
+export interface WSCloudRelayMessage {
+  cloud_relay_status?: CloudRelayStatus;
+}
