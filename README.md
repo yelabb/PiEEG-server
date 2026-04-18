@@ -19,7 +19,7 @@ Reads at 250 Hz · streams over WebSocket · live dashboard with spectral analys
 [![Discord](https://img.shields.io/discord/1059637443548987462?color=5865F2&logo=discord&logoColor=white&label=Discord)](https://discord.gg/neJ45FR6Sv)
 [![Listen](https://img.shields.io/badge/🎧_Audio_Overview-NotebookLM-8A2BE2)](https://miruns.lon1.cdn.digitaloceanspaces.com/Stream_live_brainwaves_with_Raspberry_Pi.m4a)
 
-**[Try it now](https://pieeg.vercel.app)** — no hardware needed, runs in demo mode with synthetic EEG data.
+**[Try it now](https://pieeg.vercel.app)** — no hardware needed, click **▶ Use Demo Server** then **Connect**.
 **[Documentation](https://pieeg-server-doc.vercel.app)** — full guides, API reference, and integration docs.
 **[Chat with us](https://discord.gg/neJ45FR6Sv)** — Join PiEEG Discord community 
 ```bash
@@ -156,7 +156,10 @@ pieeg-server               # or: pieeg-server --mock  (no hardware)
 
 ### 2. Open the dashboard
 
-Browse to **http://raspberrypi.local:1617** — you'll see live waveforms immediately.
+Browse to **http://raspberrypi.local:1617** — you'll land on the **Session Lobby**.
+The server URL is pre-filled with `ws://raspberrypi.local:1616` — click **Connect** to start streaming.
+
+> **No hardware?** Click **▶ Use Demo Server** to connect to a public mock instance with synthetic EEG data.
 
 ### 3. Connect from code
 
@@ -227,6 +230,7 @@ That's it. Every frame is plain JSON — no SDK, no binary protocol, works in an
 | Feature | Description |
 |---------|-------------|
 | **Real-time waveforms** | Canvas 2D, adaptive quality; time window 2–16 s, Y-scale ±50–500 µV |
+| **Session lobby** | Enter server URL and click Connect; **▶ Use Demo Server** prefills the public mock endpoint; Disconnect button returns to lobby |
 | **Signal quality badges** | Live per-channel RMS with color feedback (green / yellow / red / gray) |
 | **Channel detail panel** | Click to expand: zoomed trace, FFT, band power bars, histogram, statistics |
 | **Spectral analysis** | 256-point FFT in Web Worker; PSD (log dB / linear); band power bars δ θ α β γ |

@@ -9,6 +9,20 @@ import { Callout } from 'nextra/components'
 
 The PiEEG Server dashboard is a browser-based real-time visualization tool served at `http://<host>:1617`.
 
+## Session Lobby
+
+When you open the dashboard, you land on the **Session Lobby**:
+
+- **Server URL** field is pre-filled with your server's WebSocket address (`ws://localhost:1616` by default).
+- Click **Connect** (or press Enter) to start streaming.
+- Click **▶ Use Demo Server** to prefill the public mock endpoint — no hardware required.
+- **Join with session code** lets you paste a code or URL shared by someone else.
+- Once connected, the **Disconnect** button in the header status bar closes the WebSocket and returns you to the lobby.
+
+<Callout type="info">
+  The hosted demo at [pieeg.vercel.app](https://pieeg.vercel.app) pre-fills the demo server URL automatically.
+</Callout>
+
 ## Features
 
 | Feature | Description |

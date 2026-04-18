@@ -99,3 +99,15 @@ PiEEG Server has minimal dependencies:
 | `scipy` | ≥1.10 | Butterworth filter |
 | `rich` | ≥13.0 | Terminal UI / monitor |
 | `bleak` | ≥0.21 | Bluetooth LE (IronBCI only, optional) |
+
+## Dashboard Environment Variables
+
+These are **build-time** variables for the Vite dashboard (set them when building or deploying the dashboard separately, e.g. on Vercel).
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VITE_SERVER_URL` | *(unset)* | When set, the Session Lobby pre-fills this URL instead of auto-detecting from `localhost`. Also marks the session as **demo mode** (DEMO badge, auth bypassed). For Vercel: set to `https://pieeg-server--mock.fly.dev`. |
+
+<Callout type="warning">
+  `VITE_SERVER_URL` only affects the **initial value** shown in the lobby. The user can always edit the URL before clicking Connect — there is no hidden override.
+</Callout>
