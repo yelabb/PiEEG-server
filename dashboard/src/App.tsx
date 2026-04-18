@@ -16,16 +16,23 @@ import ChannelMismatchBanner from "./components/ChannelMismatchBanner";
 import ShortcutHelp from "./components/ShortcutHelp";
 import ChatPanel from "./components/ChatPanel";
 import WebhookPanel from "./components/WebhookPanel";
+import CloudPanel from "./components/CloudPanel";
 import RegisterPanel from "./components/RegisterPanel";
 import ExperiencesPage from "./components/ExperiencesPage";
 import { useWebhooks } from "./hooks/useWebhooks";
+import { useCloud, RELAY_MAX_MINUTES } from "./hooks/useCloud";
 import ErrorBoundary from "./components/ErrorBoundary";
-import { NUM_CHANNELS } from "./types";
+import { NUM_CHANNELS, SAMPLE_RATE } from "./types";
 import { GUIDED_PRESETS } from "./types";
 import type { SelectOption, GuidedPreset, HampelConfig } from "./types";
 
 const DEFAULT_MOBILE = new Set([0, 1, 2, 3]);
-const isDemo = !!import.meta.env.VITE_SERVER_URL;
+const FLY_DEMO_HOST = "pieeg-server--mock.fly.dev";
+
+function checkIsDemo(wsUrl?: string): boolean {
+  if (!wsUrl) return false;
+  try { return new URL(wsUrl).hostname === FLY_DEMO_HOST; } catch { return false; }
+}
 
 type ViewState = "live" | "sessions" | "playback" | "experiences";
 
@@ -278,7 +285,13 @@ function SpikeRejectionGroup({
   );
 }
 
-export default function App() {
+export default function App({ wsUrl, onDisconnect }: { wsUrl?: string; onDisconnect?: () => void }) {
+  const isDemo = checkIsDemo(wsUrl);
+
+  useEffect(() => {
+    document.title = isDemo ? "PiEEG Demo" : "PiEEG Dashboard";
+  }, [isDemo]);
+
   const [view, setView] = useState<ViewState>("live");
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
   const [paused, setPaused] = useState(false);
@@ -299,10 +312,11 @@ export default function App() {
   const [showDocs, setShowDocs] = useState(false);
   const [showRegisters, setShowRegisters] = useState(false);
   const [showWebhooks, setShowWebhooks] = useState(false);
+  const [showCloud, setShowCloud] = useState(false);
   const [webhooksEnabled, setWebhooksEnabled] = useState(
     () => localStorage.getItem("pieeg_webhooks_enabled") === "true"
   );
-  const eeg = useEEG(timeWindow);
+  const eeg = useEEG(timeWindow, wsUrl);
   const numCh = eeg.numChannels;
 
   const [serverInfo, setServerInfo] = useState<{ version: string; branch: string | null } | null>(null);
@@ -334,6 +348,7 @@ export default function App() {
   }, []);
 
   const webhooks = useWebhooks(webhooksEnabled, eeg.data, eeg.sendCommand);
+  const cloud = useCloud(eeg.sendCommand);
 
   // ── LSL streaming ───────────────────────────────────────────────────
   const [lslRunning, setLslRunning] = useState(false);
@@ -538,7 +553,7 @@ export default function App() {
   // --- Sessions / Playback views ---
   if (view === "playback" && selectedSession) {
     return (
-      <AuthGate>
+      <AuthGate skipAuth={isDemo}>
         <ErrorBoundary>
           <SessionViewer
             filename={selectedSession}
@@ -551,7 +566,7 @@ export default function App() {
 
   if (view === "sessions") {
     return (
-      <AuthGate>
+      <AuthGate skipAuth={isDemo}>
         <ErrorBoundary>
           <SessionList
             onSelect={(filename) => { setSelectedSession(filename); setView("playback"); }}
@@ -564,7 +579,7 @@ export default function App() {
 
   if (view === "experiences") {
     return (
-      <AuthGate>
+      <AuthGate skipAuth={isDemo}>
         <ErrorBoundary>
           <ExperiencesPage
             eegData={eeg.data}
@@ -581,7 +596,7 @@ export default function App() {
   eeg.data.gridSuspended = expandedCh !== null && activeChannels.has(expandedCh);
 
   return (
-    <AuthGate>
+    <AuthGate skipAuth={isDemo}>
       <UpdateBanner />
       <ChannelMismatchBanner numChannels={numCh} eegData={eeg.data} connected={eeg.connected} />
       {/* Header */}
@@ -618,8 +633,31 @@ export default function App() {
           </span>
           <span style={{ fontFamily: "var(--mono)" }}>{eeg.hz ? `${eeg.hz} Hz` : "— Hz"}</span>
           <span style={{ fontFamily: "var(--mono)" }}>{eeg.sampleCount.toLocaleString()} samples</span>
+          {onDisconnect && (
+            <button className="disconnect-btn" onClick={onDisconnect} title="Return to lobby">
+              ✗ Disconnect
+            </button>
+          )}
         </div>
       </header>
+
+      {/* Live Relay banner */}
+      {cloud.relayStatus.running && (
+        <div className="relay-banner">
+          <span className="relay-banner-dot" />
+          <span className="relay-banner-label">Live Relay active</span>
+          <span className="relay-banner-timer">
+            {Math.floor(cloud.relayElapsed / 60).toString().padStart(2, "0")}:{(cloud.relayElapsed % 60).toString().padStart(2, "0")}
+            <span className="relay-banner-limit"> / {RELAY_MAX_MINUTES}:00</span>
+          </span>
+          <span className="relay-banner-frames">
+            {cloud.relayStatus.send_count?.toLocaleString() ?? 0} frames
+          </span>
+          <button className="btn relay-banner-stop" onClick={cloud.stopRelay}>
+            Stop
+          </button>
+        </div>
+      )}
 
       {/* Controls */}
       <div className="controls">
@@ -680,6 +718,13 @@ export default function App() {
           title="Lab Streaming Layer — stream EEG to external apps"
         >
           LSL {lslRunning ? "ON" : "OFF"}
+        </button>
+        <button
+          className={`btn btn-cloud${showCloud ? " active" : ""}${cloud.loggedIn ? " cloud-logged-in" : ""}`}
+          onClick={() => setShowCloud((v) => !v)}
+          title="PiEEG Cloud — stream, upload, manage sessions"
+        >
+          ☁ Cloud{cloud.loggedIn && <span className="cloud-active-dot" />}
         </button>
         <button
           className="btn btn-xr"
@@ -922,6 +967,22 @@ export default function App() {
               >
                 View Session
               </button>
+              {cloud.loggedIn && (
+                <button
+                  className="btn modal-btn-upload"
+                  disabled={cloud.uploading}
+                  onClick={() => {
+                    const r = eeg.recordResult!;
+                    cloud.uploadSession(r.filename, r.downloadUrl, {
+                      channels: eeg.numChannels,
+                      sampleRate: SAMPLE_RATE,
+                      duration: r.duration,
+                    });
+                  }}
+                >
+                  {cloud.uploading ? "Uploading…" : "Upload to Cloud"}
+                </button>
+              )}
               <button
                 className="btn modal-btn-dismiss"
                 onClick={eeg.dismissRecordResult}
@@ -949,6 +1010,13 @@ export default function App() {
         webhooks={webhooks}
         webhooksEnabled={webhooksEnabled}
         onToggleEnabled={toggleWebhooksEnabled}
+      />
+
+      {/* Cloud side panel */}
+      <CloudPanel
+        open={showCloud}
+        onClose={() => setShowCloud(false)}
+        cloud={cloud}
       />
 
       {/* Register / Noise diagnostic panel */}

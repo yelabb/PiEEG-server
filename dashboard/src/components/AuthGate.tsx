@@ -2,18 +2,18 @@ import { useState, useEffect, type ReactNode, type FormEvent, type ChangeEvent }
 
 interface AuthGateProps {
   children: ReactNode;
+  skipAuth?: boolean;
 }
 
 type AuthState = "checking" | "login" | "ok";
 
-export default function AuthGate({ children }: AuthGateProps) {
-  const serverUrl = import.meta.env.VITE_SERVER_URL as string | undefined;
-  const [state, setState] = useState<AuthState>(serverUrl ? "ok" : "checking");
+export default function AuthGate({ children, skipAuth }: AuthGateProps) {
+  const [state, setState] = useState<AuthState>(skipAuth ? "ok" : "checking");
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (serverUrl) return; // skip auth when using external server
+    if (skipAuth) return; // skip auth when using external server
     const checkAuth = async () => {
       try {
         const r = await fetch("/auth/status", { credentials: "include" });

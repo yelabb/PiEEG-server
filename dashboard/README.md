@@ -2,6 +2,18 @@
 
 Real-time EEG visualization dashboard built with React 19 + Vite 6. Connects to the PiEEG server via WebSocket and renders live waveforms, spectral analysis, session playback, and an immersive WebXR view — all from a browser. Supports both 8-channel and 16-channel configurations.
 
+## Session Lobby
+
+On launch, the dashboard shows a **Session Lobby** where you choose how to connect:
+
+- **Server URL** — pre-filled with `ws://localhost:1616` (auto-detected). Edit to point at any PiEEG server on your network.
+- **Connect** — primary action button; also triggered by pressing Enter in the URL field.
+- **▶ Use Demo Server** — prefills the URL with the public Fly.io mock server (`wss://pieeg-server--mock.fly.dev`). You still click Connect.
+- **Join with session code** — paste a session code or full URL shared by another user.
+- **Disconnect** — button in the status bar returns to the lobby and closes the WebSocket.
+
+When `VITE_SERVER_URL` is set at build time (e.g. Vercel deployment), the lobby pre-fills with the demo server URL instead of localhost.
+
 ## Tech Stack
 
 | Layer | Tech |

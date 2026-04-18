@@ -18,7 +18,7 @@ const BACKOFF_INITIAL_MS = 1000;
 const BACKOFF_MAX_MS = 30000;
 const BACKOFF_MULTIPLIER = 2;
 
-export function useEEG(timeWindowSec = 4): UseEEGReturn {
+export function useEEG(timeWindowSec = 4, wsUrl?: string): UseEEGReturn {
   const [connected, setConnected] = useState(false);
   const [numChannels, setNumChannels] = useState(NUM_CHANNELS);
   const [sampleCount, setSampleCount] = useState(0);
@@ -93,25 +93,46 @@ export function useEEG(timeWindowSec = 4): UseEEGReturn {
   }, []);
 
   useEffect(() => {
-    const serverUrl = import.meta.env.VITE_SERVER_URL as string | undefined;
     let wsBase: string;
     let tokenUrl: string;
 
-    if (serverUrl) {
-      // Explicit server URL provided via VITE_SERVER_URL env variable
-      const url = new URL(serverUrl);
-      const wsScheme = url.protocol === "https:" ? "wss" : "ws";
-      wsBase = `${wsScheme}://${url.host}`;
-      tokenUrl = `${url.protocol}//${url.host}/auth/ws-token`;
+    if (wsUrl) {
+      // Explicit URL from session lobby
+      let parsed: URL;
+      try {
+        parsed = new URL(wsUrl);
+      } catch {
+        console.error("Invalid wsUrl provided to useEEG:", wsUrl);
+        return;
+      }
+
+      if (parsed.protocol !== "ws:" && parsed.protocol !== "wss:") {
+        console.error("Unsupported wsUrl protocol provided to useEEG:", parsed.protocol);
+        return;
+      }
+
+      wsBase = parsed.toString();
+      const httpScheme = parsed.protocol === "wss:" ? "https" : "http";
+      tokenUrl = `${httpScheme}://${parsed.host}/auth/ws-token`;
     } else {
-      const wsHost = location.hostname || "localhost";
-      const wsPort = import.meta.env.DEV ? 1616 : parseInt(location.port || "1617") - 1;
-      const wsScheme = location.protocol === "https:" ? "wss" : "ws";
-      const httpScheme = location.protocol === "https:" ? "https" : "http";
-      wsBase = `${wsScheme}://${wsHost}:${wsPort}`;
-      tokenUrl = import.meta.env.DEV
-        ? `${httpScheme}://${wsHost}:1617/auth/ws-token`
-        : `/auth/ws-token`;
+      const serverUrl = import.meta.env.VITE_SERVER_URL as string | undefined;
+
+      if (serverUrl) {
+        // Explicit server URL provided via VITE_SERVER_URL env variable
+        const url = new URL(serverUrl);
+        const wsScheme = url.protocol === "https:" ? "wss" : "ws";
+        wsBase = `${wsScheme}://${url.host}`;
+        tokenUrl = `${url.protocol}//${url.host}/auth/ws-token`;
+      } else {
+        const wsHost = location.hostname || "localhost";
+        const wsPort = import.meta.env.DEV ? 1616 : parseInt(location.port || "1617") - 1;
+        const wsScheme = location.protocol === "https:" ? "wss" : "ws";
+        const httpScheme = location.protocol === "https:" ? "https" : "http";
+        wsBase = `${wsScheme}://${wsHost}:${wsPort}`;
+        tokenUrl = import.meta.env.DEV
+          ? `${httpScheme}://${wsHost}:1617/auth/ws-token`
+          : `/auth/ws-token`;
+      }
     }
 
     async function fetchWsToken(): Promise<string | null> {
@@ -184,6 +205,12 @@ export function useEEG(timeWindowSec = 4): UseEEGReturn {
         // Forward LSL status to handler
         if ("lsl_status" in msg) {
           const handler = (window as unknown as Record<string, unknown>).__lslHandler;
+          if (typeof handler === "function") handler(msg);
+        }
+
+        // Forward cloud relay status to handler
+        if ("cloud_relay_status" in msg) {
+          const handler = (window as unknown as Record<string, unknown>).__cloudRelayHandler;
           if (typeof handler === "function") handler(msg);
         }
 
