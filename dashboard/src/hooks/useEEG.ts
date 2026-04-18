@@ -38,6 +38,7 @@ export function useEEG(timeWindowSec = 4, wsUrl?: string): UseEEGReturn {
   const samplesInBufRef = useRef(0);
   const numChRef = useRef(NUM_CHANNELS);
   const tsRef = useRef<number[]>([]);
+  const hampelBaselineRef = useRef<number | null>(null);
   const pausedRef = useRef(false);
   const sampleCountRef = useRef(0);
   const lastUIUpdate = useRef(0);
@@ -128,6 +129,7 @@ export function useEEG(timeWindowSec = 4, wsUrl?: string): UseEEGReturn {
       ws.onopen = () => {
         setConnected(true);
         backoffMs = BACKOFF_INITIAL_MS; // Reset on successful connect
+        hampelBaselineRef.current = null; // Reset so next count becomes new baseline
       };
       ws.onclose = () => {
         setConnected(false);
@@ -200,7 +202,13 @@ export function useEEG(timeWindowSec = 4, wsUrl?: string): UseEEGReturn {
         // Handle Hampel filter config updates
         if ("hampel_config" in msg) {
           const hc = (msg as Record<string, unknown>).hampel_config as HampelConfig;
-          if (hc) setHampelConfig(hc);
+          if (hc) {
+            // Capture baseline on first update so UI shows session-scoped count
+            if (hampelBaselineRef.current === null) {
+              hampelBaselineRef.current = hc.replaced_count;
+            }
+            setHampelConfig({ ...hc, replaced_count: hc.replaced_count - hampelBaselineRef.current });
+          }
         }
 
         if ("status" in msg) {
