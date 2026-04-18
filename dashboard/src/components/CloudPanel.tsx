@@ -13,6 +13,7 @@ export default function CloudPanel({ open, onClose, cloud }: Props) {
   const [otp, setOtp] = useState("");
   const [tab, setTab] = useState<"relay" | "sessions">("relay");
   const [tosAccepted, setTosAccepted] = useState(hasAcceptedTerms);
+  const [copied, setCopied] = useState(false);
 
   const handleTosAccept = useCallback(() => setTosAccepted(true), []);
 
@@ -157,9 +158,13 @@ export default function CloudPanel({ open, onClose, cloud }: Props) {
                       />
                       <button
                         className="btn cloud-btn-secondary"
-                        onClick={() => navigator.clipboard.writeText(cloud.relayShareUrl!)}
+                        onClick={() => {
+                          navigator.clipboard.writeText(cloud.relayShareUrl!);
+                          setCopied(true);
+                          setTimeout(() => setCopied(false), 2000);
+                        }}
                       >
-                        Copy
+                        {copied ? "✓ Copied" : "Copy"}
                       </button>
                       <p className="cloud-hint" style={{ marginTop: 8 }}>
                         Open this link on <strong>pieeg.vercel.app</strong> or
