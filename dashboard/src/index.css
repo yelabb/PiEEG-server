@@ -5075,7 +5075,8 @@ body {
   background: var(--bg);
   padding: 24px;
   position: relative;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .lobby-glow {
@@ -5115,13 +5116,13 @@ body {
 
 .lobby-logo-wrap {
   position: relative;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 
 .lobby-logo-wrap::after {
   content: "";
   position: absolute;
-  inset: -8px;
+  inset: -12px;
   border-radius: 50%;
   background: radial-gradient(circle, rgba(0, 112, 243, 0.12) 0%, transparent 70%);
   pointer-events: none;
@@ -5135,8 +5136,8 @@ body {
 }
 
 .lobby-logo-img {
-  width: 96px;
-  height: 96px;
+  width: 128px;
+  height: 128px;
   object-fit: contain;
   position: relative;
   z-index: 1;
@@ -5144,11 +5145,11 @@ body {
 }
 
 .lobby-title {
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 700;
   letter-spacing: -0.03em;
   color: var(--text);
-  margin-bottom: 2px;
+  margin-bottom: 4px;
 }
 
 .lobby-title-accent {

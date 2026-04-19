@@ -1,5 +1,7 @@
 import { useState, useCallback, useEffect, type FormEvent, type KeyboardEvent } from "react";
 
+declare const __APP_VERSION__: string;
+
 const FLY_DEMO_URL = "wss://pieeg-server--mock.fly.dev";
 
 /** Compute the default WS URL from the current page location. */
@@ -63,11 +65,9 @@ export default function SessionLobby({ onConnect }: Props) {
         <div className="lobby-title">
           Pi<span className="lobby-title-accent">EEG</span>-server
         </div>
-        {serverInfo && (
-          <span className="lobby-version">
-            v{serverInfo.version}{serverInfo.branch ? ` · ${serverInfo.branch}` : ""}
-          </span>
-        )}
+        <span className="lobby-version">
+          v{serverInfo?.version ?? __APP_VERSION__}{serverInfo?.branch ? ` · ${serverInfo.branch}` : ""}
+        </span>
 
         {/* ── Connect ───────────────────────────────────── */}
         <div className="lobby-section">
