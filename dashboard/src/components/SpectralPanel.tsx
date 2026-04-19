@@ -18,7 +18,7 @@ function drawSpectrum(
   maxHz: number, logScale: boolean, selectedBand: string | null,
   traces?: readonly { psd: Float64Array; color: string }[],
 ) {
-  const plotL = 48;
+  const plotL = 36;
   const plotR = w - 16;
   const plotT = 24;
   const plotB = h - 24;
@@ -33,8 +33,9 @@ function drawSpectrum(
   // band backgrounds
   for (const band of FREQUENCY_BANDS) {
     if (band.low >= maxHz) continue;
-    const x1 = plotL + (Math.max(band.low, 0) / maxHz) * plotW;
-    const x2 = plotL + (Math.min(band.high, maxHz) / maxHz) * plotW;
+    const bandLow = band.name === "Delta" ? 0 : Math.max(band.low, 0);
+    const x1 = bandLow <= 0 ? 0 : plotL + (bandLow / maxHz) * plotW;
+    const x2 = band.high >= maxHz ? w : plotL + (Math.min(band.high, maxHz) / maxHz) * plotW;
     const highlight = selectedBand === band.name;
     ctx.fillStyle = band.color + (highlight ? "28" : "12");
     ctx.fillRect(x1, plotT, x2 - x1, plotH);
@@ -76,7 +77,12 @@ function drawSpectrum(
         v = data[k] / peak;
       }
       const y = plotB - Math.min(1, v) * plotH;
-      k === 1 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      if (k === 1) {
+        ctx.moveTo(plotL, y);
+        ctx.lineTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
     }
     ctx.strokeStyle = color;
     ctx.lineWidth = 1.5;
@@ -84,7 +90,7 @@ function drawSpectrum(
 
     if (fill) {
       ctx.lineTo(plotL + (freqs[maxBin] / maxHz) * plotW, plotB);
-      ctx.lineTo(plotL + (freqs[1] / maxHz) * plotW, plotB);
+      ctx.lineTo(plotL, plotB);
       ctx.closePath();
       ctx.fillStyle = color.slice(0, 7) + "12";
       ctx.fill();
@@ -104,11 +110,15 @@ function drawSpectrum(
   // axis labels
   ctx.fillStyle = "#8b949e";
   ctx.font = "10px monospace";
-  ctx.textAlign = "center";
   for (let f = 0; f <= maxHz; f += 10) {
-    ctx.fillText(`${f}`, plotL + (f / maxHz) * plotW, plotB + 14);
+    if (f === maxHz) {
+      ctx.textAlign = "right";
+      ctx.fillText(`${f} Hz`, plotR + 10, plotB + 14);
+    } else {
+      ctx.textAlign = "center";
+      ctx.fillText(`${f}`, plotL + (f / maxHz) * plotW, plotB + 14);
+    }
   }
-  ctx.fillText("Hz", plotR + 2, plotB + 14);
 
   ctx.save();
   ctx.translate(11, plotT + plotH / 2);
@@ -134,6 +144,7 @@ interface SpectralPanelProps {
 }
 
 const SpectralPanel = memo(function SpectralPanel({ eegData }: SpectralPanelProps) {
+  const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef(0);
   const frameRef = useRef(0);
@@ -161,7 +172,8 @@ const SpectralPanel = memo(function SpectralPanel({ eegData }: SpectralPanelProp
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    const wrap = wrapRef.current;
+    if (!canvas || !wrap) return;
     const ctx = canvas.getContext("2d", { alpha: false })!;
 
     const observer = new ResizeObserver((entries) => {
@@ -173,7 +185,7 @@ const SpectralPanel = memo(function SpectralPanel({ eegData }: SpectralPanelProp
       canvasSizeRef.current = { w, h, pw: Math.round(w * dpr), ph: Math.round(h * dpr), dpr };
       needsResizeRef.current = true;
     });
-    observer.observe(canvas);
+    observer.observe(wrap);
 
     const tick = () => {
       const { w, h, pw, ph } = canvasSizeRef.current;
@@ -368,10 +380,10 @@ const SpectralPanel = memo(function SpectralPanel({ eegData }: SpectralPanelProp
         </div>
       </div>
 
-      <div className="spectral-canvas-wrap">
+      <div className="spectral-canvas-wrap" ref={wrapRef}>
         <canvas
           ref={canvasRef}
-          style={{ display: "block", width: "100%", height: "100%" }}
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", display: "block" }}
         />
         {paused && <div className="spectral-paused">PAUSED</div>}
       </div>

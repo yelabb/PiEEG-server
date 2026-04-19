@@ -1195,6 +1195,7 @@ body {
   background: var(--bg);
   border-top: 1px solid var(--border);
   position: relative;
+  overflow: hidden;
 }
 
 .spectral-toolbar {
@@ -1262,6 +1263,7 @@ body {
   flex: 1;
   min-height: 100px;
   background: var(--bg);
+  overflow: hidden;
 }
 
 .spectral-paused {
