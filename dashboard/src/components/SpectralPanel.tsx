@@ -3,6 +3,17 @@ import { FftEngine, FREQUENCY_BANDS } from "../lib/fftEngine";
 import type { EEGData, BandPowers, CanvasSize } from "../types";
 import { SAMPLE_RATE, TRACE_COLORS } from "../types";
 
+// Read canvas colours from CSS variables (fall back to dark defaults)
+function getCanvasColors(el: Element) {
+  const s = getComputedStyle(el);
+  return {
+    bg: s.getPropertyValue("--canvas-bg").trim() || "#0d1117",
+    grid: s.getPropertyValue("--canvas-grid").trim() || "rgba(48,54,61,0.45)",
+    axisText: s.getPropertyValue("--canvas-axis-text").trim() || "#8b949e",
+    curve: s.getPropertyValue("--canvas-curve").trim() || "#58a6ff",
+  };
+}
+
 const FFT_SIZE = 256;
 const MAX_DISPLAY_HZ = 60;
 const FFT_EVERY_FRAMES = 12;
@@ -17,6 +28,7 @@ function drawSpectrum(
   psd: Float64Array, freqs: Float64Array,
   maxHz: number, logScale: boolean, selectedBand: string | null,
   traces?: readonly { psd: Float64Array; color: string }[],
+  colors?: { bg: string; grid: string; axisText: string; curve: string },
 ) {
   const plotL = 36;
   const plotR = w - 16;
@@ -46,7 +58,7 @@ function drawSpectrum(
   }
 
   // grid
-  ctx.strokeStyle = "rgba(48,54,61,0.45)";
+  ctx.strokeStyle = colors?.grid ?? "rgba(48,54,61,0.45)";
   ctx.lineWidth = 0.5;
   for (let i = 1; i < 5; i++) {
     const y = plotT + (i / 5) * plotH;
@@ -104,11 +116,11 @@ function drawSpectrum(
       for (let k = 1; k <= maxBin; k++) if (t.psd[k] > peak) peak = t.psd[k];
     for (const t of traces) drawCurve(t.psd, t.color, false);
   } else {
-    drawCurve(psd, "#58a6ff", true);
+    drawCurve(psd, colors?.curve ?? "#58a6ff", true);
   }
 
   // axis labels
-  ctx.fillStyle = "#8b949e";
+  ctx.fillStyle = colors?.axisText ?? "#8b949e";
   ctx.font = "10px monospace";
   for (let f = 0; f <= maxHz; f += 10) {
     if (f === maxHz) {
@@ -156,6 +168,7 @@ const SpectralPanel = memo(function SpectralPanel({ eegData }: SpectralPanelProp
   const dprRef = useRef(window.devicePixelRatio || 1);
   const canvasSizeRef = useRef<CanvasSize>({ w: 0, h: 0, pw: 0, ph: 0, dpr: 1 });
   const needsResizeRef = useRef(true);
+  const canvasColorsRef = useRef({ bg: "", grid: "", axisText: "", curve: "" });
 
   const [channel, setChannel] = useState(-1);
   const [logScale, setLogScale] = useState(true);
@@ -175,6 +188,11 @@ const SpectralPanel = memo(function SpectralPanel({ eegData }: SpectralPanelProp
     const wrap = wrapRef.current;
     if (!canvas || !wrap) return;
     const ctx = canvas.getContext("2d", { alpha: false })!;
+    canvasColorsRef.current = getCanvasColors(canvas);
+
+    // Re-read colors when theme changes
+    const themeObs = new MutationObserver(() => { canvasColorsRef.current = getCanvasColors(canvas); });
+    themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
@@ -202,7 +220,7 @@ const SpectralPanel = memo(function SpectralPanel({ eegData }: SpectralPanelProp
       }
       ctx.setTransform(dprRef.current, 0, 0, dprRef.current, 0, 0);
 
-      ctx.fillStyle = "#0d1117";
+      ctx.fillStyle = canvasColorsRef.current.bg || "#0d1117";
       ctx.fillRect(0, 0, w, h);
 
       frameRef.current++;
@@ -287,10 +305,11 @@ const SpectralPanel = memo(function SpectralPanel({ eegData }: SpectralPanelProp
       }
 
       const psd = smoothRef.current;
+      const cc = canvasColorsRef.current;
       if (channel === -2) {
         const allSmooth = smoothAllRef.current;
         if (allSmooth.length === 0 || !allSmooth[0] || allSmooth[0].length === 0) {
-          ctx.fillStyle = "#4b5563";
+          ctx.fillStyle = cc.axisText || "#4b5563";
           ctx.font = "13px monospace";
           ctx.textAlign = "center";
           ctx.fillText("Collecting samples…", w / 2, h / 2);
@@ -299,15 +318,15 @@ const SpectralPanel = memo(function SpectralPanel({ eegData }: SpectralPanelProp
             psd: s,
             color: TRACE_COLORS[i % TRACE_COLORS.length],
           }));
-          drawSpectrum(ctx, w, h, allSmooth[0], fft._frequencies, MAX_DISPLAY_HZ, logScale, selectedBand, traces);
+          drawSpectrum(ctx, w, h, allSmooth[0], fft._frequencies, MAX_DISPLAY_HZ, logScale, selectedBand, traces, cc);
         }
       } else if (!psd || psd.length === 0) {
-        ctx.fillStyle = "#4b5563";
+        ctx.fillStyle = cc.axisText || "#4b5563";
         ctx.font = "13px monospace";
         ctx.textAlign = "center";
         ctx.fillText("Collecting samples…", w / 2, h / 2);
       } else {
-        drawSpectrum(ctx, w, h, psd, fft._frequencies, MAX_DISPLAY_HZ, logScale, selectedBand);
+        drawSpectrum(ctx, w, h, psd, fft._frequencies, MAX_DISPLAY_HZ, logScale, selectedBand, undefined, cc);
       }
 
       rafRef.current = requestAnimationFrame(tick);
@@ -317,6 +336,7 @@ const SpectralPanel = memo(function SpectralPanel({ eegData }: SpectralPanelProp
     return () => {
       cancelAnimationFrame(rafRef.current);
       observer.disconnect();
+      themeObs.disconnect();
     };
   }, [eegData, channel, logScale, paused, selectedBand, fft]);
 

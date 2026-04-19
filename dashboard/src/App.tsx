@@ -21,6 +21,7 @@ import RegisterPanel from "./components/RegisterPanel";
 import ExperiencesPage from "./components/ExperiencesPage";
 import { useWebhooks } from "./hooks/useWebhooks";
 import { useCloud, RELAY_MAX_MINUTES } from "./hooks/useCloud";
+import { useTheme } from "./hooks/useTheme";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { NUM_CHANNELS, SAMPLE_RATE } from "./types";
 import { GUIDED_PRESETS } from "./types";
@@ -325,6 +326,7 @@ export default function App({ wsUrl, onDisconnect }: { wsUrl?: string; onDisconn
   );
   const eeg = useEEG(timeWindow, wsUrl);
   const numCh = eeg.numChannels;
+  const { theme, toggle: toggleTheme } = useTheme();
 
   const [serverInfo, setServerInfo] = useState<{ version: string; branch: string | null } | null>(null);
   useEffect(() => {
@@ -641,6 +643,9 @@ export default function App({ wsUrl, onDisconnect }: { wsUrl?: string; onDisconn
           </span>
           <span style={{ fontFamily: "var(--mono)" }}>{eeg.hz ? `${eeg.hz} Hz` : "— Hz"}</span>
           <span style={{ fontFamily: "var(--mono)" }}>{eeg.sampleCount.toLocaleString()} samples</span>
+          <button className="theme-toggle" onClick={toggleTheme} title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}>
+            {theme === "dark" ? "☀" : "☾"}
+          </button>
           {onDisconnect && (
             <button className="disconnect-btn" onClick={onDisconnect} title="Return to lobby">
               ✗ Disconnect

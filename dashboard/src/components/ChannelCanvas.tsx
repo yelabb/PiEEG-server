@@ -2,8 +2,15 @@ import { useRef, useEffect, memo } from "react";
 import type { EEGData, CanvasSize } from "../types";
 import { TRACE_COLORS } from "../types";
 
-const GRID_COLOR = "rgba(48,54,61,0.4)";
-const ZERO_LINE_COLOR = "rgba(88,166,255,0.15)";
+// Read canvas colours from CSS variables (fall back to dark defaults)
+function getCanvasColors(el: Element) {
+  const s = getComputedStyle(el);
+  return {
+    bg: s.getPropertyValue("--canvas-bg").trim() || "rgba(48,54,61,0.4)",
+    grid: s.getPropertyValue("--canvas-grid").trim() || "rgba(48,54,61,0.4)",
+    zeroLine: s.getPropertyValue("--canvas-zero-line").trim() || "rgba(88,166,255,0.15)",
+  };
+}
 
 type Quality = "high" | "medium" | "low";
 
@@ -19,7 +26,8 @@ function drawChannel(
   ctx: CanvasRenderingContext2D,
   w: number, h: number,
   buf: Float32Array, count: number, writeIndex: number, bufferSize: number,
-  yRange: number, color: string, quality: Quality
+  yRange: number, color: string, quality: Quality,
+  gridColor: string, zeroLineColor: string,
 ): number | undefined {
   ctx.clearRect(0, 0, w, h);
 
@@ -31,7 +39,7 @@ function drawChannel(
     ctx.moveTo(0, y);
     ctx.lineTo(w, y);
   }
-  ctx.strokeStyle = GRID_COLOR;
+  ctx.strokeStyle = gridColor;
   ctx.lineWidth = 0.5;
   ctx.stroke();
 
@@ -39,7 +47,7 @@ function drawChannel(
   ctx.beginPath();
   ctx.moveTo(0, mid);
   ctx.lineTo(w, mid);
-  ctx.strokeStyle = ZERO_LINE_COLOR;
+  ctx.strokeStyle = zeroLineColor;
   ctx.lineWidth = 1;
   ctx.stroke();
 
@@ -117,6 +125,17 @@ const ChannelCanvas = memo(function ChannelCanvas({ chIdx, eegData, yRange, expa
   const lastWriteIdxRef = useRef(-1);
   const rmsFrameRef = useRef(0);
   const tickCountRef = useRef(0);
+  const canvasColorsRef = useRef({ bg: "#0d1117", grid: "", zeroLine: "" });
+
+  // Re-read canvas colors when theme changes
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    canvasColorsRef.current = getCanvasColors(canvas);
+    const obs = new MutationObserver(() => { canvasColorsRef.current = getCanvasColors(canvas!); });
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => obs.disconnect();
+  }, []);
 
   // ResizeObserver — no getBoundingClientRect per frame
   useEffect(() => {
@@ -144,6 +163,7 @@ const ChannelCanvas = memo(function ChannelCanvas({ chIdx, eegData, yRange, expa
     const ctx = canvas.getContext("2d", { alpha: false })!;
     lastWriteIdxRef.current = -1;
     tickCountRef.current = 0;
+    canvasColorsRef.current = getCanvasColors(canvas);
 
     const staggerOffset = chIdx % GRID_FRAME_INTERVAL;
 
@@ -182,7 +202,7 @@ const ChannelCanvas = memo(function ChannelCanvas({ chIdx, eegData, yRange, expa
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       }
 
-      ctx.fillStyle = "#0d1117";
+      ctx.fillStyle = canvasColorsRef.current.bg;
       ctx.fillRect(0, 0, w, h);
 
       const buf = eegData.buffers.current[chIdx];
@@ -200,6 +220,8 @@ const ChannelCanvas = memo(function ChannelCanvas({ chIdx, eegData, yRange, expa
         yRange,
         TRACE_COLORS[chIdx],
         qualityRef.current,
+        canvasColorsRef.current.grid,
+        canvasColorsRef.current.zeroLine,
       );
 
       rmsFrameRef.current++;

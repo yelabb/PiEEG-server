@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, type FormEvent, type KeyboardEvent } from "react";
+import { useTheme } from "../hooks/useTheme";
 
 declare const __APP_VERSION__: string;
 
@@ -20,6 +21,7 @@ export default function SessionLobby({ onConnect }: Props) {
   const [serverUrl, setServerUrl] = useState(defaultWsUrl);
   const [sessionCode, setSessionCode] = useState("");
   const [serverInfo, setServerInfo] = useState<{ version: string; branch: string | null } | null>(null);
+  const { theme, toggle: toggleTheme } = useTheme();
 
   useEffect(() => {
     fetch("/api/info")
@@ -141,6 +143,9 @@ export default function SessionLobby({ onConnect }: Props) {
 
         {/* ── Footer ───────────────────────────────────────── */}
         <div className="lobby-footer-row">
+          <button className="theme-toggle" onClick={toggleTheme} title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}>
+            {theme === "dark" ? "☀" : "☾"}
+          </button>
           <a
             className="lobby-gh-link"
             href="https://github.com/pieeg-club/PiEEG-server"

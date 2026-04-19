@@ -42,6 +42,9 @@ const FilterPreview = memo(function FilterPreview({
   const dprRef = useRef(window.devicePixelRatio || 1);
   const sizeRef = useRef<CanvasSize>({ w: 0, h: 0, pw: 0, ph: 0, dpr: 1 });
   const needsDrawRef = useRef(true);
+  const canvasBgRef = useRef("#0d1117");
+  const canvasGridRef = useRef("rgba(48,54,61,0.45)");
+  const canvasAxisRef = useRef("#8b949e");
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -53,7 +56,7 @@ const FilterPreview = memo(function FilterPreview({
     if (w === 0 || h === 0) return;
 
     ctx.setTransform(dprRef.current, 0, 0, dprRef.current, 0, 0);
-    ctx.fillStyle = "#0d1117";
+    ctx.fillStyle = canvasBgRef.current;
     ctx.fillRect(0, 0, w, h);
 
     const padL = 42;
@@ -97,7 +100,7 @@ const FilterPreview = memo(function FilterPreview({
     }
 
     // Grid
-    ctx.strokeStyle = "rgba(48,54,61,0.45)";
+    ctx.strokeStyle = canvasGridRef.current;
     ctx.lineWidth = 0.5;
     for (const dB of [0, -10, -20, -30, -40, -50, -60]) {
       const y = padT + ((-dB) / 60) * plotH;
@@ -151,7 +154,7 @@ const FilterPreview = memo(function FilterPreview({
       ctx.stroke();
       ctx.setLineDash([]);
 
-      ctx.fillStyle = "#6e7681";
+      ctx.fillStyle = canvasAxisRef.current;
       ctx.font = "12px monospace";
       ctx.textAlign = "center";
       ctx.fillText("Filter OFF — unfiltered passthrough", padL + plotW / 2, padT + plotH / 2);
@@ -173,7 +176,7 @@ const FilterPreview = memo(function FilterPreview({
     ctx.fillText("-3 dB", padL - 4, y3db + 3);
 
     // Y-axis labels
-    ctx.fillStyle = "#8b949e";
+    ctx.fillStyle = canvasAxisRef.current;
     ctx.font = "9px monospace";
     ctx.textAlign = "right";
     for (const dB of [0, -20, -40, -60]) {
@@ -185,13 +188,13 @@ const FilterPreview = memo(function FilterPreview({
     ctx.translate(10, padT + plotH / 2);
     ctx.rotate(-Math.PI / 2);
     ctx.textAlign = "center";
-    ctx.fillStyle = "#8b949e";
+    ctx.fillStyle = canvasAxisRef.current;
     ctx.font = "9px monospace";
     ctx.fillText("dB", 0, 0);
     ctx.restore();
 
     // X-axis labels
-    ctx.fillStyle = "#8b949e";
+    ctx.fillStyle = canvasAxisRef.current;
     ctx.font = "9px monospace";
     ctx.textAlign = "center";
     for (const f of [1, 10, 20, 30, 50, 100]) {
@@ -233,6 +236,23 @@ const FilterPreview = memo(function FilterPreview({
     needsDrawRef.current = true;
     draw();
     return () => observer.disconnect();
+  }, [draw]);
+
+  // Re-read canvas colors when theme changes
+  useEffect(() => {
+    const readColors = () => {
+      const el = canvasRef.current ?? document.documentElement;
+      const s = getComputedStyle(el);
+      canvasBgRef.current = s.getPropertyValue("--canvas-bg").trim() || "#0d1117";
+      canvasGridRef.current = s.getPropertyValue("--canvas-grid").trim() || "rgba(48,54,61,0.45)";
+      canvasAxisRef.current = s.getPropertyValue("--canvas-axis-text").trim() || "#8b949e";
+      needsDrawRef.current = true;
+      draw();
+    };
+    readColors();
+    const obs = new MutationObserver(readColors);
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => obs.disconnect();
   }, [draw]);
 
   return (

@@ -71,6 +71,22 @@ const Spectrogram = memo(function Spectrogram({ eegData }: SpectrogramProps) {
 
   // Cached colour-bar ImageData so we don't redraw it every frame
   const colourBarCacheRef = useRef<{ img: ImageData; h: number } | null>(null);
+  const canvasBgRef = useRef("#0d1117");
+  const canvasAxisRef = useRef("#8b949e");
+
+  // Re-read canvas colors when theme changes
+  useEffect(() => {
+    const readColors = () => {
+      const el = canvasRef.current ?? document.documentElement;
+      const s = getComputedStyle(el);
+      canvasBgRef.current = s.getPropertyValue("--canvas-bg").trim() || "#0d1117";
+      canvasAxisRef.current = s.getPropertyValue("--canvas-axis-text").trim() || "#8b949e";
+    };
+    readColors();
+    const obs = new MutationObserver(readColors);
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => obs.disconnect();
+  }, []);
 
   const [channel, setChannel] = useState(-1);
   const [paused, setPaused] = useState(false);
@@ -205,12 +221,12 @@ const Spectrogram = memo(function Spectrogram({ eegData }: SpectrogramProps) {
     prevHeatH: number,
     setHeatImg: (img: ImageData, w: number, h: number) => void,
   ) {
-    ctx.fillStyle = "#0d1117";
+    ctx.fillStyle = canvasBgRef.current;
     ctx.fillRect(0, 0, w, h);
 
     const histCount = historyCountRef.current;
     if (histCount < 2) {
-      ctx.fillStyle = "#4b5563";
+      ctx.fillStyle = canvasAxisRef.current;
       ctx.font = "13px monospace";
       ctx.textAlign = "center";
       ctx.fillText("Collecting spectrogram data…", w / 2, h / 2);
@@ -280,14 +296,14 @@ const Spectrogram = memo(function Spectrogram({ eegData }: SpectrogramProps) {
       padL, padT, plotW, plotH,      // dest rect (in CSS pixels, scaled by transform)
     );
     // Clear the temp pixels we wrote at origin
-    ctx.fillStyle = "#0d1117";
+    ctx.fillStyle = canvasBgRef.current;
     ctx.fillRect(0, 0, padL, padT + plotH);
     ctx.restore();
     setHeatImg(imgData, imgW, imgH);
 
     // Y-axis labels (frequency)
     const df = SAMPLE_RATE / FFT_SIZE;
-    ctx.fillStyle = "#8b949e";
+    ctx.fillStyle = canvasAxisRef.current;
     ctx.font = "9px monospace";
     ctx.textAlign = "right";
     const rowH = plotH / numRows;
@@ -303,7 +319,7 @@ const Spectrogram = memo(function Spectrogram({ eegData }: SpectrogramProps) {
     ctx.translate(10, padT + plotH / 2);
     ctx.rotate(-Math.PI / 2);
     ctx.textAlign = "center";
-    ctx.fillStyle = "#8b949e";
+    ctx.fillStyle = canvasAxisRef.current;
     ctx.font = "9px monospace";
     ctx.fillText("Hz", 0, 0);
     ctx.restore();
@@ -311,7 +327,7 @@ const Spectrogram = memo(function Spectrogram({ eegData }: SpectrogramProps) {
     // X-axis: time (approximate)
     const totalSec = (numCols * FFT_EVERY_FRAMES) / 60;
     ctx.textAlign = "center";
-    ctx.fillStyle = "#8b949e";
+    ctx.fillStyle = canvasAxisRef.current;
     ctx.font = "9px monospace";
     const timeStep = totalSec > 30 ? 10 : totalSec > 10 ? 5 : 2;
     for (let t = 0; t <= totalSec; t += timeStep) {
@@ -343,7 +359,7 @@ const Spectrogram = memo(function Spectrogram({ eegData }: SpectrogramProps) {
     }
     ctx.putImageData(barCache.img, Math.round(barX * dprRef.current), Math.round(barT * dprRef.current));
 
-    ctx.fillStyle = "#8b949e";
+    ctx.fillStyle = canvasAxisRef.current;
     ctx.font = "8px monospace";
     ctx.textAlign = "left";
     ctx.fillText("0", barX + barW + 2, barT + 6);
