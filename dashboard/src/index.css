@@ -62,6 +62,26 @@ body {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
+   App Body — sidebar + content
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.app-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
    Header
    ═══════════════════════════════════════════════════════════════════════ */
 
@@ -308,15 +328,197 @@ body {
    Controls Toolbar
    ═══════════════════════════════════════════════════════════════════════ */
 
-.controls {
+/* ═══════════════════════════════════════════════════════════════════════
+   Left Sidebar (Figma / Photoshop style)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.sidebar {
+  width: 200px;
+  background: var(--bg-subtle);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  transition: width 0.2s ease;
+  position: relative;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+.sidebar.collapsed {
+  width: 36px;
+}
+
+.sidebar.collapsed .sb-section-label,
+.sidebar.collapsed .sb-section-body {
+  display: none;
+}
+
+.sidebar-toggle {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  width: 100%;
+  height: 28px;
+  background: var(--bg-subtle);
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-dim);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.sidebar-toggle:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+}
+
+.sidebar-chevron {
+  font-size: 14px;
+  font-weight: 700;
+  transition: transform 0.2s ease;
+}
+
+.sidebar-chevron.closed {
+  transform: rotate(180deg);
+}
+
+/* ── Sidebar sections ── */
+.sb-section {
+  border-bottom: 1px solid var(--border);
+}
+
+.sb-section-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  padding: 8px 10px 2px;
+  user-select: none;
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 16px;
-  background: var(--bg-subtle);
-  border-bottom: 1px solid var(--border);
+}
+
+.sb-section-badge {
+  font-size: 9px;
+  font-weight: 500;
+  font-family: var(--mono);
+  color: var(--text-dim);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 0 5px;
+  border-radius: 999px;
+  margin-left: auto;
+}
+
+.sb-section-body {
+  padding: 4px 8px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sb-section-body .btn {
+  width: 100%;
+  justify-content: flex-start;
+  height: 28px;
+  font-size: 12px;
+  border-radius: var(--radius-xs);
+  padding: 0 8px;
+}
+
+.sb-section-body .control-group {
+  flex-direction: row;
+  width: 100%;
+  gap: 4px;
+}
+
+.sb-section-body .control-group select {
+  flex: 1;
+  min-width: 0;
+}
+
+.sb-ch-toggles {
+  display: flex;
+  gap: 4px;
+}
+
+/* ── Inline expandable sections (sidebar) ──────────────────────────── */
+.sb-expand {
+  width: 100%;
+}
+
+.sb-expand-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: var(--radius-xs);
+  transition: all 0.15s;
+  text-align: left;
+}
+
+.sb-expand-toggle:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+}
+
+.sb-expand-toggle.active {
+  color: var(--text);
+}
+
+.sb-expand-toggle.active::before {
+  content: "";
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--green);
   flex-shrink: 0;
-  flex-wrap: wrap;
+}
+
+.sb-expand-arrow {
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-block;
+  transition: transform 0.15s ease;
+  width: 10px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.sb-expand-arrow.open {
+  transform: rotate(90deg);
+}
+
+.sb-expand-hint {
+  font-size: 10px;
+  font-family: var(--mono);
+  opacity: 0.7;
+}
+
+.sb-expand-body {
+  padding: 4px 8px 6px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  border-left: 1px solid var(--border);
+  margin-left: 12px;
+  margin-bottom: 2px;
 }
 
 .btn {
@@ -543,27 +745,8 @@ body {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
-   Channel Selector Bar
+   Channel Selector (used inside sidebar)
    ═══════════════════════════════════════════════════════════════════════ */
-
-.channel-selector {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 16px;
-  background: var(--bg);
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-}
-
-.cs-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  white-space: nowrap;
-}
 
 .cs-toggle {
   background: transparent;
@@ -618,13 +801,6 @@ body {
   color: var(--bg);
   font-weight: 700;
   box-shadow: 0 0 8px rgba(255, 255, 255, 0.06);
-}
-
-.cs-count {
-  font-size: 10px;
-  font-family: var(--mono);
-  color: var(--text-dim);
-  white-space: nowrap;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -1226,86 +1402,7 @@ body {
   background: rgba(251, 146, 60, 0.25);
 }
 
-/* ── Bandpass Filter collapsible group ──────────────────────────────── */
-.bandpass-group {
-  position: relative;
-}
-
-.bandpass-group-toggle {
-  gap: 6px;
-}
-
-.bandpass-range {
-  font-size: 10px;
-  font-family: var(--mono);
-  opacity: 0.7;
-}
-
-.bandpass-group-panel {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  z-index: 50;
-  background: var(--surface);
-  border: 1px solid var(--border-hover);
-  border-radius: var(--radius-md);
-  padding: 10px 12px;
-  box-shadow: var(--shadow-xl);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-width: 220px;
-  animation: scale-in 0.1s ease-out;
-}
-
-.bandpass-controls {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding-left: 4px;
-}
-
-/* ── Spike Rejection collapsible group ─────────────────────────────── */
-.spike-group {
-  position: relative;
-}
-
-.spike-group-toggle {
-  gap: 6px;
-}
-
-.spike-badge {
-  font-size: 10px;
-  font-weight: 600;
-  opacity: 0.8;
-}
-
-.spike-caret {
-  font-size: 10px;
-  transition: transform 0.15s ease;
-  display: inline-block;
-}
-.spike-caret.open {
-  transform: rotate(180deg);
-}
-
-.spike-group-panel {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  z-index: 50;
-  background: var(--surface);
-  border: 1px solid var(--border-hover);
-  border-radius: var(--radius-md);
-  padding: 10px 12px;
-  box-shadow: var(--shadow-xl);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-width: 280px;
-  animation: scale-in 0.1s ease-out;
-}
-
+/* ── Spike section layout (used inside sb-expand-body) ─────────────── */
 .spike-section {
   display: flex;
   flex-direction: column;
@@ -1315,19 +1412,20 @@ body {
 .spike-section-head {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .spike-hint {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--text-dim);
   white-space: nowrap;
 }
 
 .spike-section-controls {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  gap: 4px;
   padding-left: 4px;
 }
 

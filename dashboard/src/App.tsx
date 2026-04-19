@@ -74,59 +74,54 @@ function BandpassGroup({
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="bandpass-group">
+    <div className="sb-expand">
       <button
-        className={`btn bandpass-group-toggle${filterEnabled ? " active" : ""}`}
+        className={`btn${filterEnabled ? " active" : ""}`}
         onClick={() => setOpen((v) => !v)}
       >
-        Bandpass {filterEnabled ? "ON" : "OFF"}
-        {filterEnabled && (
-          <span className="bandpass-range">{lowcut}–{highcut} Hz</span>
-        )}
-        <span className={`spike-caret${open ? " open" : ""}`}>▾</span>
+        <span className={`sb-expand-arrow${open ? " open" : ""}`}>›</span>
+        Bandpass {filterEnabled ? `${lowcut}–${highcut}` : "OFF"}
       </button>
 
       {open && (
-        <div className="bandpass-group-panel">
+        <div className="sb-expand-body">
           <button
             className={`btn btn-sm${filterEnabled ? " active" : ""}`}
             onClick={toggleFilter}
           >
             {filterEnabled ? "Enabled" : "Disabled"}
           </button>
-          <div className="bandpass-controls">
-            <div className="control-group">
-              <label>Low</label>
-              <input
-                type="number"
-                value={lowcut}
-                min={0.1}
-                max={50}
-                step={0.5}
-                disabled={!filterEnabled}
-                onChange={(e: ChangeEvent<HTMLInputElement>) => {
-                  setLowcut(e.target.value);
-                  updateFilter(e.target.value, highcut);
-                }}
-              />{" "}
-              Hz
-            </div>
-            <div className="control-group">
-              <label>High</label>
-              <input
-                type="number"
-                value={highcut}
-                min={1}
-                max={125}
-                step={1}
-                disabled={!filterEnabled}
-                onChange={(e: ChangeEvent<HTMLInputElement>) => {
-                  setHighcut(e.target.value);
-                  updateFilter(lowcut, e.target.value);
-                }}
-              />{" "}
-              Hz
-            </div>
+          <div className="control-group">
+            <label>Low</label>
+            <input
+              type="number"
+              value={lowcut}
+              min={0.1}
+              max={50}
+              step={0.5}
+              disabled={!filterEnabled}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => {
+                setLowcut(e.target.value);
+                updateFilter(e.target.value, highcut);
+              }}
+            />
+            Hz
+          </div>
+          <div className="control-group">
+            <label>High</label>
+            <input
+              type="number"
+              value={highcut}
+              min={1}
+              max={125}
+              step={1}
+              disabled={!filterEnabled}
+              onChange={(e: ChangeEvent<HTMLInputElement>) => {
+                setHighcut(e.target.value);
+                updateFilter(lowcut, e.target.value);
+              }}
+            />
+            Hz
           </div>
         </div>
       )}
@@ -156,18 +151,18 @@ function SpikeRejectionGroup({
   const totalReplaced = hampelConfig.replaced_count;
 
   return (
-    <div className="spike-group">
+    <div className="sb-expand">
       <button
-        className={`btn spike-group-toggle${anyActive ? " active" : ""}`}
+        className={`btn${anyActive ? " active" : ""}`}
         onClick={() => setOpen((v) => !v)}
       >
-        Spike Rejection {anyActive ? "ON" : "OFF"}
-        {totalReplaced > 0 && <span className="spike-badge">🛡 {totalReplaced.toLocaleString()}</span>}
-        <span className={`spike-caret${open ? " open" : ""}`}>▾</span>
+        <span className={`sb-expand-arrow${open ? " open" : ""}`}>›</span>
+        Spikes {anyActive ? "ON" : "OFF"}
+        {totalReplaced > 0 && <span className="sb-expand-hint">🛡 {totalReplaced.toLocaleString()}</span>}
       </button>
 
       {open && (
-        <div className="spike-group-panel">
+        <div className="sb-expand-body">
           {/* ── Hardware (delta-threshold) ── */}
           <div className="spike-section">
             <div className="spike-section-head">
@@ -324,6 +319,7 @@ export default function App({ wsUrl, onDisconnect }: { wsUrl?: string; onDisconn
   const [showRegisters, setShowRegisters] = useState(false);
   const [showWebhooks, setShowWebhooks] = useState(false);
   const [showCloud, setShowCloud] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [webhooksEnabled, setWebhooksEnabled] = useState(
     () => localStorage.getItem("pieeg_webhooks_enabled") === "true"
   );
@@ -671,185 +667,243 @@ export default function App({ wsUrl, onDisconnect }: { wsUrl?: string; onDisconn
         </div>
       )}
 
-      {/* Controls */}
-      <div className="controls">
-        <button
-          className={`btn${paused ? " active" : ""}`}
-          onClick={togglePause}
-        >
-          {paused ? "Resume" : "Pause"}
-        </button>
-        <button
-          className={`btn btn-record${eeg.recording ? " recording" : ""}`}
-          onClick={toggleRecord}
-        >
-          <span className="rec-dot" />
-          {eeg.recording
-            ? `Stop ${formatElapsed(eeg.recordElapsed)}`
-            : "Record"}
-        </button>
-        <button
-          className={`btn${showFFT ? " active" : ""}`}
-          onClick={() => setShowFFT((v) => !v)}
-        >
-          FFT {showFFT ? "ON" : "OFF"}
-        </button>
-        <button
-          className={`btn${showSpectrogram ? " active" : ""}`}
-          onClick={() => setShowSpectrogram((v) => !v)}
-        >
-          Spectrogram {showSpectrogram ? "ON" : "OFF"}
-        </button>
-        <button
-          className={`btn${showStats ? " active" : ""}`}
-          onClick={() => setShowStats((v) => !v)}
-        >
-          Stats {showStats ? "ON" : "OFF"}
-        </button>
-        <button
-          className="btn btn-sessions"
-          onClick={() => setView("sessions")}
-        >
-          Sessions
-        </button>
-        <button
-          className={`btn btn-chat${showChat ? " active" : ""}`}
-          onClick={() => setShowChat((v) => !v)}
-        >
-          Chat
-        </button>
-        <button
-          className={`btn${showWebhooks ? " active" : ""}`}
-          onClick={() => setShowWebhooks((v) => !v)}
-        >
-          Webhooks{webhooksEnabled && <span className="wh-active-dot" />}
-        </button>
-        <button
-          className={`btn btn-lsl${lslRunning ? " active" : ""}`}
-          onClick={toggleLSL}
-          title="Lab Streaming Layer — stream EEG to external apps"
-        >
-          LSL {lslRunning ? "ON" : "OFF"}
-        </button>
-        <button
-          className={`btn btn-cloud${showCloud ? " active" : ""}${cloud.loggedIn ? " cloud-logged-in" : ""}`}
-          onClick={() => setShowCloud((v) => !v)}
-          title="PiEEG Cloud — stream, upload, manage sessions"
-        >
-          ☁ Cloud{cloud.loggedIn && <span className="cloud-active-dot" />}
-        </button>
-        <button
-          className="btn btn-xr"
-          onClick={() => setView("experiences")}
-          title="Open immersive EEG experiences"
-        >
-          Mini Games
-        </button>
-        <button
-          className={`btn${showDocs ? " active" : ""}`}
-          onClick={() => setShowDocs((v) => !v)}
-          title="Open documentation"
-        >
-          Docs
-        </button>
-        <button
-          className={`btn${showRegisters ? " active" : ""}`}
-          onClick={() => setShowRegisters((v) => !v)}
-          title="ADS1299 register config & noise diagnostic"
-        >
-          Registers
-        </button>
-        <div className="sep" />
-        <div className="control-group">
-          <label>Guide</label>
-          <select
-            value={activePreset?.id ?? ""}
-            onChange={(e: ChangeEvent<HTMLSelectElement>) => {
-              const id = e.target.value;
-              applyPreset(id ? GUIDED_PRESETS.find((p) => p.id === id) ?? null : null);
-            }}
-          >
-            <option value="">— none —</option>
-            {GUIDED_PRESETS.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.icon} {p.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="sep" />
-        <BandpassGroup
-          filterEnabled={filterEnabled}
-          lowcut={lowcut}
-          highcut={highcut}
-          toggleFilter={toggleFilter}
-          setLowcut={setLowcut}
-          setHighcut={setHighcut}
-          updateFilter={updateFilter}
-        />
-        <div className="sep" />
-        <div className="control-group">
-          <label>Time window</label>
-          <select
-            value={timeWindow}
-            onChange={(e: ChangeEvent<HTMLSelectElement>) => setTimeWindow(parseInt(e.target.value))}
-          >
-            {TIME_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="control-group">
-          <label>Scale</label>
-          <select
-            value={yScale}
-            onChange={(e: ChangeEvent<HTMLSelectElement>) => setYScale(parseInt(e.target.value))}
-          >
-            {SCALE_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="sep" />
-        <SpikeRejectionGroup
-          spikeEnabled={spikeEnabled}
-          spikeThreshold={spikeThreshold}
-          spikeResetAfter={spikeResetAfter}
-          lastSpikeThreshold={lastSpikeThreshold}
-          setSpikeThreshold={setSpikeThreshold}
-          setSpikeResetAfter={setSpikeResetAfter}
-          spikeUserAction={spikeUserAction}
-          hampelConfig={eeg.hampelConfig}
-          sendCommand={eeg.sendCommand}
-          mock={eeg.mock}
-        />
-      </div>
+      {/* ═══ Body: sidebar + content ═══ */}
+      <div className="app-body">
+        {/* ── Left Sidebar ── */}
+        <aside className={`sidebar${sidebarOpen ? "" : " collapsed"}`}>
+          <button className="sidebar-toggle" onClick={() => setSidebarOpen((v) => !v)} title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}>
+            <span className={`sidebar-chevron${sidebarOpen ? "" : " closed"}`}>‹</span>
+          </button>
 
-      {/* Channel selector */}
-      <div className="channel-selector">
-        <span className="cs-label">Channels</span>
-        <button className="cs-toggle" onClick={() => setAllChannels(true)}>All</button>
-        <button className="cs-toggle" onClick={() => setAllChannels(false)}>None</button>
-        <div className="cs-grid">
-          {Array.from({ length: numCh }, (_, i) => (
-            <button
-              key={i}
-              className={`cs-ch${activeChannels.has(i) ? " on" : ""}`}
-              onClick={() => toggleChannel(i)}
-            >
-              {i + 1}
-            </button>
-          ))}
-        </div>
-        <span className="cs-count">{activeChannels.size}/{numCh}</span>
-      </div>
+          {/* ── Record ── */}
+          <div className="sb-section">
+            <div className="sb-section-label">Record</div>
+            <div className="sb-section-body">
+              <button
+                className={`btn${paused ? " active" : ""}`}
+                onClick={togglePause}
+              >
+                {paused ? "▶ Resume" : "⏸ Pause"}
+              </button>
+              <button
+                className={`btn btn-record${eeg.recording ? " recording" : ""}`}
+                onClick={toggleRecord}
+              >
+                <span className="rec-dot" />
+                {eeg.recording
+                  ? `Stop ${formatElapsed(eeg.recordElapsed)}`
+                  : "Record"}
+              </button>
+              <button
+                className="btn btn-sessions"
+                onClick={() => setView("sessions")}
+              >
+                Sessions
+              </button>
+            </div>
+          </div>
 
-      {/* Guided preset step banner */}
-      {activePreset && (
+          {/* ── Analysis ── */}
+          <div className="sb-section">
+            <div className="sb-section-label">Analysis</div>
+            <div className="sb-section-body">
+              <button
+                className={`btn${showFFT ? " active" : ""}`}
+                onClick={() => setShowFFT((v) => !v)}
+              >
+                FFT
+              </button>
+              <button
+                className={`btn${showSpectrogram ? " active" : ""}`}
+                onClick={() => setShowSpectrogram((v) => !v)}
+              >
+                Spectrogram
+              </button>
+              <button
+                className={`btn${showStats ? " active" : ""}`}
+                onClick={() => setShowStats((v) => !v)}
+              >
+                Stats
+              </button>
+            </div>
+          </div>
+
+          {/* ── Signal ── */}
+          <div className="sb-section">
+            <div className="sb-section-label">Signal</div>
+            <div className="sb-section-body">
+              <BandpassGroup
+                filterEnabled={filterEnabled}
+                lowcut={lowcut}
+                highcut={highcut}
+                toggleFilter={toggleFilter}
+                setLowcut={setLowcut}
+                setHighcut={setHighcut}
+                updateFilter={updateFilter}
+              />
+              <SpikeRejectionGroup
+                spikeEnabled={spikeEnabled}
+                spikeThreshold={spikeThreshold}
+                spikeResetAfter={spikeResetAfter}
+                lastSpikeThreshold={lastSpikeThreshold}
+                setSpikeThreshold={setSpikeThreshold}
+                setSpikeResetAfter={setSpikeResetAfter}
+                spikeUserAction={spikeUserAction}
+                hampelConfig={eeg.hampelConfig}
+                sendCommand={eeg.sendCommand}
+                mock={eeg.mock}
+              />
+              <div className="control-group">
+                <label>Guide</label>
+                <select
+                  value={activePreset?.id ?? ""}
+                  onChange={(e: ChangeEvent<HTMLSelectElement>) => {
+                    const id = e.target.value;
+                    applyPreset(id ? GUIDED_PRESETS.find((p) => p.id === id) ?? null : null);
+                  }}
+                >
+                  <option value="">— none —</option>
+                  {GUIDED_PRESETS.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.icon} {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Display ── */}
+          <div className="sb-section">
+            <div className="sb-section-label">Display</div>
+            <div className="sb-section-body">
+              <div className="control-group">
+                <label>Time</label>
+                <select
+                  value={timeWindow}
+                  onChange={(e: ChangeEvent<HTMLSelectElement>) => setTimeWindow(parseInt(e.target.value))}
+                >
+                  {TIME_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="control-group">
+                <label>Scale</label>
+                <select
+                  value={yScale}
+                  onChange={(e: ChangeEvent<HTMLSelectElement>) => setYScale(parseInt(e.target.value))}
+                >
+                  {SCALE_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Channels ── */}
+          <div className="sb-section">
+            <div className="sb-section-label">
+              Channels
+              <span className="sb-section-badge">{activeChannels.size}/{numCh}</span>
+            </div>
+            <div className="sb-section-body">
+              <div className="sb-ch-toggles">
+                <button className="cs-toggle" onClick={() => setAllChannels(true)}>All</button>
+                <button className="cs-toggle" onClick={() => setAllChannels(false)}>None</button>
+              </div>
+              <div className="cs-grid">
+                {Array.from({ length: numCh }, (_, i) => (
+                  <button
+                    key={i}
+                    className={`cs-ch${activeChannels.has(i) ? " on" : ""}`}
+                    onClick={() => toggleChannel(i)}
+                  >
+                    {i + 1}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* ── Panels ── */}
+          <div className="sb-section">
+            <div className="sb-section-label">Panels</div>
+            <div className="sb-section-body">
+              <button
+                className={`btn btn-chat${showChat ? " active" : ""}`}
+                onClick={() => setShowChat((v) => !v)}
+              >
+                Chat
+              </button>
+              <button
+                className={`btn${showWebhooks ? " active" : ""}`}
+                onClick={() => setShowWebhooks((v) => !v)}
+              >
+                Webhooks{webhooksEnabled && <span className="wh-active-dot" />}
+              </button>
+              <button
+                className={`btn${showRegisters ? " active" : ""}`}
+                onClick={() => setShowRegisters((v) => !v)}
+                title="ADS1299 register config & noise diagnostic"
+              >
+                Registers
+              </button>
+            </div>
+          </div>
+
+          {/* ── Connect ── */}
+          <div className="sb-section">
+            <div className="sb-section-label">Connect</div>
+            <div className="sb-section-body">
+              <button
+                className={`btn btn-lsl${lslRunning ? " active" : ""}`}
+                onClick={toggleLSL}
+                title="Lab Streaming Layer — stream EEG to external apps"
+              >
+                LSL {lslRunning ? "ON" : "OFF"}
+              </button>
+              <button
+                className={`btn btn-cloud${showCloud ? " active" : ""}${cloud.loggedIn ? " cloud-logged-in" : ""}`}
+                onClick={() => setShowCloud((v) => !v)}
+                title="PiEEG Cloud — stream, upload, manage sessions"
+              >
+                ☁ Cloud{cloud.loggedIn && <span className="cloud-active-dot" />}
+              </button>
+            </div>
+          </div>
+
+          {/* ── Explore ── */}
+          <div className="sb-section">
+            <div className="sb-section-label">Explore</div>
+            <div className="sb-section-body">
+              <button
+                className="btn btn-xr"
+                onClick={() => setView("experiences")}
+                title="Open immersive EEG experiences"
+              >
+                Mini Games
+              </button>
+              <button
+                className={`btn${showDocs ? " active" : ""}`}
+                onClick={() => setShowDocs((v) => !v)}
+                title="Open documentation"
+              >
+                Docs
+              </button>
+            </div>
+          </div>
+        </aside>
+
+        {/* ── Main Content ── */}
+        <div className="app-content">
+          {/* Guided preset step banner */}
+          {activePreset && (
         <div className="preset-banner">
           <div className="preset-banner-head">
             <span className="preset-banner-icon">{activePreset.icon}</span>
@@ -936,6 +990,8 @@ export default function App({ wsUrl, onDisconnect }: { wsUrl?: string; onDisconn
         )}
         </div>
       </ErrorBoundary>
+        </div>{/* /app-content */}
+      </div>{/* /app-body */}
 
       {/* Recording result modal */}
       {eeg.recordResult && (
