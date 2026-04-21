@@ -55,6 +55,8 @@ import { FileTree } from 'nextra/components'
     <FileTree.File name="dashboard.py" />
     <FileTree.File name="auth.py" />
     <FileTree.File name="filters.py" />
+    <FileTree.File name="spike_filter.py" />
+    <FileTree.File name="_native.py" />
     <FileTree.File name="recorder.py" />
     <FileTree.File name="monitor.py" />
     <FileTree.File name="osc_vrchat.py" />
@@ -75,6 +77,8 @@ import { FileTree } from 'nextra/components'
 | `dashboard.py` | HTTP server for React dashboard + REST API |
 | `auth.py` | 6-digit code auth, session cookies, WS token management |
 | `filters.py` | Butterworth IIR bandpass (SOS), per-channel state |
+| `spike_filter.py` | Hampel median-absolute-deviation spike rejection |
+| `_native.py` | Soft-import of optional [`pieeg-core`](https://github.com/pieeg-club/PiEEG-core) Rust accelerator; exposes `HAS_NATIVE`, `engine_info()` |
 | `recorder.py` | CSV writer, subscribes to acquisition queue |
 | `monitor.py` | Rich TUI with sparklines, standalone or embedded |
 | `osc_vrchat.py` | UDP OSC bridge for VRChat (chatbox + avatar params) |
@@ -103,3 +107,30 @@ import { FileTree } from 'nextra/components'
 | FFT | Cooley-Tukey radix-2 (Web Worker) |
 | State | Hooks + refs only |
 | Styling | Plain CSS |
+
+## DSP Engine
+
+All DSP hot paths have two interchangeable implementations:
+
+| Path | Python (default) | Native (optional) |
+|------|------------------|-------------------|
+| 24-bit ADC decode | `hardware.PiEEGHardware._decode_channels` | `pieeg_core.decode_channels` |
+| Butterworth bandpass | `filters.MultichannelFilter` | `pieeg_core.MultichannelFilter` |
+| Hampel spike reject | `spike_filter.HampelFilter` | `pieeg_core.HampelFilter` |
+
+`_native.py` performs a single soft-import of the optional
+[`pieeg-core`](https://github.com/pieeg-club/PiEEG-core) wheel. When
+present, `filters.py` and `spike_filter.py` rebind the public class name
+to the Rust implementation (identical API, ~15–30× faster); when absent,
+the pure-Python classes remain in use. Callers never import
+`pieeg_core` directly — all detection lives in `_native.py` and the
+Python classes stay the reference implementation and fallback.
+
+The active engine is surfaced via:
+
+- startup log line and the Rich startup panel (`Engine` row)
+- WebSocket welcome message `engine` field
+- `pieeg-server doctor` → **DSP Engine** section
+
+Install with `pip install 'pieeg-server[fast]'`. `pieeg-core` is
+AGPL-3.0-or-later, so the default MIT install remains license-clean.
