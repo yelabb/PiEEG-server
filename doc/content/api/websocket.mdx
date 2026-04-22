@@ -151,12 +151,20 @@ Sent on connect:
   "channels": 16,
   "filter": false,
   "recording": false,
+  "engine": { "native": true, "engine": "pieeg-core", "version": "0.1.1" },
   "spike_config": { "enabled": true, "threshold": 200 },
   "hampel_config": { "enabled": true, "window_size": 5, "n_sigma": 3.0, "replaced_count": 0 }
 }
 ```
 
 The `channels` field reflects the selected device: **16** for `pieeg16` (default), **8** for `pieeg8` or `ironbci8`.
+
+The `engine` field reports which DSP implementation is active. When the
+optional [`pieeg-core`](https://github.com/pieeg-club/PiEEG-core) wheel is
+installed (`pip install 'pieeg-server[fast]'`), `native` is `true` and
+`version` is the `pieeg-core` version. Otherwise `engine` is `"python"`,
+`native` is `false`, and `version` is `null` — the pure-Python fallback
+is in use.
 
 ### Record Status
 
