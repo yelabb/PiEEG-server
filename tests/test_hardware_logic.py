@@ -37,8 +37,15 @@ class TestADCConstants:
     def test_vref_is_4_5V(self):
         assert VREF_UV == 4.5e6  # 4.5V in µV
 
-    def test_spi_speed_is_4mhz(self):
-        assert SPI_SPEED_HZ == 4_000_000
+    def test_spi_speed_matches_reference(self):
+        # 600 kHz matches the reference PiEEG script and avoids bit-error
+        # spikes seen at higher speeds on the Raspberry Pi GPIO traces.
+        assert SPI_SPEED_HZ == 600_000
+
+    def test_spike_threshold_disabled_by_default(self):
+        # The reference script has no frame-level spike rejection; at 600 kHz
+        # SPI it isn't needed and rejecting frames would create timing gaps.
+        assert SPIKE_THRESHOLD == -1
 
     def test_bytes_per_read_is_27(self):
         # 3 status + 8 channels × 3 bytes = 27
@@ -54,12 +61,17 @@ class TestSpikeDetection:
     """Test the spike detection logic (critical for data quality)."""
 
     def _make_hw(self):
-        """Create a PiEEGHardware without initializing GPIO/SPI."""
+        """Create a PiEEGHardware without initializing GPIO/SPI.
+
+        Tests in this class exercise the legacy delta-threshold filter, so
+        we explicitly set a finite threshold (the module default is -1 =
+        disabled, matching the reference PiEEG script).
+        """
         hw = PiEEGHardware.__new__(PiEEGHardware)
         hw._last_valid_value = None
         hw._spike_count = 0
         hw._consecutive_rejects = 0
-        hw._spike_threshold = SPIKE_THRESHOLD
+        hw._spike_threshold = 5000
         hw._spike_reset_after = SPIKE_RESET_AFTER
         return hw
 

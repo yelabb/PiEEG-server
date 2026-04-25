@@ -87,8 +87,13 @@ BYTES_PER_READ = 27  # 3 status + 8 channels * 3 bytes
 # --- Expected status header from ADC chip 2 ---
 EXPECTED_STATUS = (192, 0, 8)  # 0xC0, 0x00, 0x08
 
-# --- Spike detection defaults (matches not_spike script) ---
-SPIKE_THRESHOLD = 5000  # max allowed jump in raw 24-bit signed value
+# --- Spike detection defaults ---
+# Disabled by default (-1): the reference PiEEG script performs no frame-level
+# spike rejection. At 600 kHz SPI there are no bit-error spikes to filter, and
+# rejecting frames creates timing gaps that distort real EEG transients
+# (eye blinks, motion). Set to a positive value to re-enable the legacy
+# delta-threshold filter from the original "not_spike" script.
+SPIKE_THRESHOLD = -1
 SPIKE_RESET_AFTER = 50  # re-sync baseline after this many consecutive rejections
 
 # --- Linux GPIO chardev v1 ioctl constants ---

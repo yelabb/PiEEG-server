@@ -34,8 +34,13 @@ class AcquisitionLoop:
         self._thread: threading.Thread | None = None
         self._sample_count = 0
         self._settle_remaining = 0
-        # Device-agnostic Hampel spike filter (runs in acquisition thread)
-        self._hampel = HampelFilter(num_channels=hardware.num_channels)
+        # Device-agnostic Hampel spike filter (runs in acquisition thread).
+        # Disabled by default to match the reference PiEEG script: at 600 kHz
+        # SPI there are no bit-error spikes to filter, and replacing values
+        # with the rolling median can mask real EEG transients (eye blinks,
+        # P300, etc.). Can be re-enabled at runtime via the dashboard or API.
+        self._hampel = HampelFilter(num_channels=hardware.num_channels,
+                                    enabled=False)
         # Default subscriber for backward compat (.queue property)
         self._default_queue = self.subscribe()
 
