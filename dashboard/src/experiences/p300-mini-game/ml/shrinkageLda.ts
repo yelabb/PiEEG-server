@@ -199,6 +199,12 @@ export class ShrinkageLDA implements Decoder {
   score(epoch: Epoch): number {
     if (!this.payload) throw new Error("ShrinkageLDA.score: model not fit.");
     const x = epochToFeatures(epoch);
+    if (x.length !== this.payload.D) {
+      throw new Error(
+        `ShrinkageLDA.score: feature-length mismatch (epoch=${x.length}, model=${this.payload.D}). ` +
+        "Channel set or decimation likely changed since calibration \u2014 re-train the subject.",
+      );
+    }
     return linearScore(x, this.payload);
   }
 
@@ -216,7 +222,21 @@ export class ShrinkageLDA implements Decoder {
 
   deserialise(model: SerialisedModel): void {
     if (model.kind !== KIND) throw new Error(`ShrinkageLDA.deserialise: kind mismatch (${model.kind}).`);
-    this.payload = model.payload as LDAPayload;
+    const p = model.payload as Partial<LDAPayload> | null;
+    if (
+      !p ||
+      typeof p.D !== "number" ||
+      !Array.isArray(p.weights) ||
+      !Array.isArray(p.featureMean) ||
+      !Array.isArray(p.featureStd) ||
+      typeof p.bias !== "number" ||
+      p.weights.length !== p.D ||
+      p.featureMean.length !== p.D ||
+      p.featureStd.length !== p.D
+    ) {
+      throw new Error("ShrinkageLDA.deserialise: malformed payload.");
+    }
+    this.payload = p as LDAPayload;
   }
 }
 
@@ -242,13 +262,23 @@ function evaluate(X: Float32Array[], y: boolean[], p: LDAPayload): number {
 }
 
 function crossValidate(X: Float32Array[], y: boolean[], k: number): number {
-  // Stratified-ish split: interleave by label.
-  const idx = X.map((_, i) => i);
-  // Shuffle deterministically by sorting on hash for reproducibility.
-  idx.sort((a, b) => Math.sin(a) - Math.sin(b));
+  // Stratified k-fold: split each class independently, then round-robin into
+  // folds. Without this, an unbalanced calibration set (typical P300 ~1:8
+  // target:non-target) routinely produces folds with zero target epochs,
+  // which silently collapse to a one-class predictor and report bogus high
+  // CV accuracy.
+  const tIdx: number[] = [];
+  const nIdx: number[] = [];
+  for (let i = 0; i < X.length; i++) (y[i] ? tIdx : nIdx).push(i);
+  // Deterministic scramble per class (independent of the other class).
+  const scramble = (arr: number[]) =>
+    arr.sort((a, b) => Math.sin(a * 12.9898) - Math.sin(b * 12.9898));
+  scramble(tIdx);
+  scramble(nIdx);
 
   const folds: number[][] = Array.from({ length: k }, () => []);
-  for (let i = 0; i < idx.length; i++) folds[i % k].push(idx[i]);
+  for (let i = 0; i < tIdx.length; i++) folds[i % k].push(tIdx[i]);
+  for (let i = 0; i < nIdx.length; i++) folds[i % k].push(nIdx[i]);
 
   let accSum = 0;
   for (let f = 0; f < k; f++) {
@@ -281,6 +311,15 @@ function fitQuickLDA(X: Float32Array[], y: boolean[]): LDAPayload {
   // avoids the O(D²·N) Ledoit-Wolf work on every fold.
   const D = X[0].length;
   const N = X.length;
+
+  // Refuse degenerate folds. Without this guard, a fold containing only one
+  // class trains a meaningless classifier (NaN-laden weights or a constant
+  // predictor) which still scores well on a same-class test fold.
+  let nTPre = 0, nNPre = 0;
+  for (let i = 0; i < N; i++) (y[i] ? nTPre++ : nNPre++);
+  if (nTPre === 0 || nNPre === 0) {
+    throw new Error("fitQuickLDA: degenerate fold (single-class training set).");
+  }
 
   const fm = new Array<number>(D).fill(0);
   for (const x of X) for (let j = 0; j < D; j++) fm[j] += x[j];

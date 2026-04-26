@@ -57,7 +57,6 @@ export class P300Runtime {
 
   private sampleTapInstalled = false;
   private installedSampleHandler?: (t: number, channels: number[]) => void;
-  private previousSampleHandler: unknown = undefined;
   private busUnsubscribe: (() => void) | null = null;
   private extractorUnsubscribe: (() => void) | null = null;
   private currentAcc: EvidenceAccumulator | null = null;
@@ -251,30 +250,53 @@ export class P300Runtime {
 
   private installSampleTap(): void {
     if (this.sampleTapInstalled) return;
-    const w = window as unknown as Record<string, unknown>;
-    this.previousSampleHandler = w.__p300SampleHandler;
-    const prev = this.previousSampleHandler;
+    // Use a shared subscriber registry rather than save-and-restore. The old
+    // chained-handler approach left zombie runtimes pinned via the saved
+    // `previousSampleHandler` slot — when subject/channels changed, samples
+    // continued flowing into a dead ring while the new ring stayed empty
+    // (calibration counter never advanced).
+    const w = window as unknown as {
+      __p300SampleHandler?: (t: number, channels: number[]) => void;
+      __p300SampleSubscribers?: Set<(t: number, channels: number[]) => void>;
+    };
+    let subs = w.__p300SampleSubscribers;
+    if (!subs) {
+      subs = new Set();
+      w.__p300SampleSubscribers = subs;
+      // Single multiplexer: useEEG keeps calling __p300SampleHandler exactly
+      // once per sample; we fan it out to every live subscriber.
+      w.__p300SampleHandler = (t: number, channels: number[]) => {
+        const set = w.__p300SampleSubscribers;
+        if (!set) return;
+        for (const fn of set) {
+          try { fn(t, channels); } catch { /* ignore subscriber errors */ }
+        }
+      };
+    }
     this.installedSampleHandler = (t: number, channels: number[]) => {
       this.ring.push(t, channels);
-      if (typeof prev === "function") {
-        try { (prev as (t: number, c: number[]) => void)(t, channels); } catch { /* ignore */ }
-      }
     };
-    w.__p300SampleHandler = this.installedSampleHandler;
+    subs.add(this.installedSampleHandler);
     this.sampleTapInstalled = true;
   }
 
   private removeSampleTap(): void {
     if (!this.sampleTapInstalled) return;
-    const w = window as unknown as Record<string, unknown>;
-    // Only restore the previous handler if we're still the installed one —
-    // otherwise another runtime (or consumer) has chained on top of us and
-    // we must leave their handler in place.
-    if (w.__p300SampleHandler === this.installedSampleHandler) {
-      w.__p300SampleHandler = this.previousSampleHandler;
+    const w = window as unknown as {
+      __p300SampleHandler?: (t: number, channels: number[]) => void;
+      __p300SampleSubscribers?: Set<(t: number, channels: number[]) => void>;
+    };
+    const subs = w.__p300SampleSubscribers;
+    if (subs && this.installedSampleHandler) {
+      subs.delete(this.installedSampleHandler);
+      if (subs.size === 0) {
+        // Last subscriber out: tear down the multiplexer so unrelated code
+        // probing __p300SampleHandler sees a clean slate.
+        delete w.__p300SampleHandler;
+        delete w.__p300SampleSubscribers;
+      }
     }
     this.installedSampleHandler = undefined;
-    this.previousSampleHandler = undefined;
     this.sampleTapInstalled = false;
   }
 }
