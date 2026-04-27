@@ -41,6 +41,7 @@ from __future__ import annotations
 import logging
 import sys
 import threading
+import time
 from collections import deque
 
 logger = logging.getLogger("pieeg.ironbci32")
@@ -147,6 +148,8 @@ class IronBCI32Hardware:
         self._reader_thread: threading.Thread | None = None
         self._connected = False
         self._dropped_frames = 0
+        self._bytes_received = 0
+        self._frames_decoded = 0
         # Shared spike-filter knobs (kept identical to other drivers).
         self._spike_threshold = 5000
         self._spike_reset_after = 50
@@ -188,6 +191,16 @@ class IronBCI32Hardware:
         """Total resync events since `open()`. Useful for diagnostics."""
         return self._dropped_frames
 
+    @property
+    def bytes_received(self) -> int:
+        """Total bytes pulled from the serial port since `open()`."""
+        return self._bytes_received
+
+    @property
+    def frames_decoded(self) -> int:
+        """Total valid frames decoded since `open()`."""
+        return self._frames_decoded
+
     # --- Lifecycle ---------------------------------------------------------
 
     def open(self) -> None:
@@ -225,6 +238,8 @@ class IronBCI32Hardware:
         self._stop_event.clear()
         self._buffer.clear()
         self._dropped_frames = 0
+        self._bytes_received = 0
+        self._frames_decoded = 0
         self._reader_thread = threading.Thread(
             target=self._read_loop, name="ironbci32-reader", daemon=True,
         )
@@ -266,17 +281,61 @@ class IronBCI32Hardware:
 
     # --- Internal reader ---------------------------------------------------
 
+    def _read_bytes(self, n: int) -> bytes:
+        """Read up to `n` bytes from the port and bump the byte counter."""
+        port = self._port
+        if port is None:
+            return b""
+        data = port.read(n)
+        if data:
+            self._bytes_received += len(data)
+        return data
+
     def _read_loop(self) -> None:
         """Daemon thread: pull bytes from the port and parse frames forever."""
         port = self._port
         assert port is not None
+        # Periodic diagnostic log so silent-reader bugs are debuggable.
+        last_diag = time.monotonic()
+        last_bytes = 0
+        last_frames = 0
+
         # First sync: walk to the next 0xA0 byte.
         if not self._sync_to_start_byte():
             return
 
         while not self._stop_event.is_set():
+            # Diagnostic heartbeat (every ~5 s):
+            now = time.monotonic()
+            if now - last_diag >= 5.0:
+                d_bytes = self._bytes_received - last_bytes
+                d_frames = self._frames_decoded - last_frames
+                if d_frames == 0:
+                    if d_bytes == 0:
+                        logger.warning(
+                            "IronBCI-32: no bytes in last 5s on %s. "
+                            "Check device power, USB cable, and that --serial-port "
+                            "matches the IronBCI-32 (not another USB-CDC device).",
+                            self._serial_port,
+                        )
+                    else:
+                        logger.warning(
+                            "IronBCI-32: %d bytes in last 5s but 0 frames decoded "
+                            "on %s. Likely wrong baud rate, wrong device on this "
+                            "port, or framing mismatch (expected 0xA0..0xC0).",
+                            d_bytes, self._serial_port,
+                        )
+                else:
+                    logger.debug(
+                        "IronBCI-32: %d frames in last 5s (%d B, %d resyncs total)",
+                        d_frames, d_bytes, self._dropped_frames,
+                    )
+                last_diag = now
+                last_bytes = self._bytes_received
+                last_frames = self._frames_decoded
+
             try:
-                payload = port.read(PAYLOAD_BYTES)
+                payload = self._read_bytes(PAYLOAD_BYTES)
             except Exception as e:
                 logger.warning("IronBCI-32 serial read error: %s", e)
                 self._dropped_frames += 1
@@ -295,7 +354,7 @@ class IronBCI32Hardware:
                 continue
 
             try:
-                next_start = port.read(1)
+                next_start = self._read_bytes(1)
             except Exception as e:
                 logger.warning("IronBCI-32 serial read error: %s", e)
                 continue
@@ -316,6 +375,12 @@ class IronBCI32Hardware:
                     return
                 continue
 
+            if self._frames_decoded == 0:
+                logger.info(
+                    "IronBCI-32: first frame decoded on %s (counter=%d)",
+                    self._serial_port, _counter,
+                )
+            self._frames_decoded += 1
             self._buffer.append(channels)
 
     def _sync_to_start_byte(self) -> bool:
@@ -332,15 +397,14 @@ class IronBCI32Hardware:
         warned = False
         while not self._stop_event.is_set():
             try:
-                b = port.read(1)
+                b = self._read_bytes(1)
             except Exception as e:
                 logger.warning("IronBCI-32 serial read error during resync: %s", e)
                 return False
             if not b:
-                import time as _t
                 if empty_reads_started is None:
-                    empty_reads_started = _t.monotonic()
-                elif not warned and _t.monotonic() - empty_reads_started > _STALL_WARN_AFTER_S:
+                    empty_reads_started = time.monotonic()
+                elif not warned and time.monotonic() - empty_reads_started > _STALL_WARN_AFTER_S:
                     logger.warning(
                         "IronBCI-32: no bytes received on %s after %.1fs. "
                         "Is the device powered? Correct port? "

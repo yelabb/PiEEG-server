@@ -80,6 +80,15 @@ class PiEEGServer:
             num_channels=self._num_channels, lowcut=lowcut, highcut=highcut,
         )
 
+    def _sample_rate(self) -> int:
+        """Best-effort hardware sample rate; defaults to 250 Hz (PiEEG/SPI)."""
+        hw = getattr(self._acq, "_hw", None)
+        rate = getattr(hw, "sample_rate", None)
+        try:
+            return int(rate) if rate else 250
+        except (TypeError, ValueError):
+            return 250
+
     def disable_filter(self):
         self._filter = None
 
@@ -189,7 +198,7 @@ class PiEEGServer:
         # Send welcome message
         welcome = {
             "status": "connected",
-            "sample_rate": 250,
+            "sample_rate": self._sample_rate(),
             "channels": self._num_channels,
             "filter": self._filter is not None,
             "mock": self._acq._mock,
