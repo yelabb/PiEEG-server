@@ -140,6 +140,7 @@ def parse_args():
         help="GPIO chip device path (default: '/dev/gpiochip4' for Pi 5)",
     )
     rec.add_argument("--profile", **profile_kwargs)
+    _add_ble_args(rec)
     rec.add_argument(
         "--verbose", "-v", action="store_true",
         help="Enable debug logging",
@@ -162,6 +163,7 @@ def parse_args():
         help="GPIO chip device path (default: '/dev/gpiochip4' for Pi 5)",
     )
     mon.add_argument("--profile", **profile_kwargs)
+    _add_ble_args(mon)
     mon.add_argument(
         "--verbose", "-v", action="store_true",
         help="Enable debug logging",
