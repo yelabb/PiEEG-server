@@ -216,10 +216,13 @@ class AcquisitionLoop:
             )
             return
 
+        interval = 1.0 / getattr(self._hw, "sample_rate", SAMPLE_RATE)
+        next_t = time.monotonic()
         while not self._stop_event.is_set():
             sample = self._hw.read_sample()
             if sample is None:
-                time.sleep(SAMPLE_INTERVAL)
+                time.sleep(interval)
+                next_t = time.monotonic()
                 continue
 
             sample = self._hampel.apply(sample)
@@ -230,18 +233,33 @@ class AcquisitionLoop:
                 "channels": sample,
             }
             self._loop.call_soon_threadsafe(self._enqueue, frame)
+
+            next_t += interval
+            delay = next_t - time.monotonic()
+            if delay > 0:
+                time.sleep(delay)
+            elif delay < -interval * 50:
+                next_t = time.monotonic()
 
     def _run_serial(self):
         """Serial acquisition (IronBCI-32 / FreeEEG32-style USB-CDC boards).
 
         The hardware driver opens its own reader thread on `open()` and feeds
-        an internal buffer; we drain it here at the sample rate, matching the
-        same timing contract as `_run_hardware()` and `_run_ble()`.
+        an internal buffer; we drain it here paced at the device sample rate.
+
+        Pacing matters: USB-CDC delivers bytes in 8–16ms chunks, so without
+        a per-sample sleep the consumer would emit frames in tight bursts
+        (4–8 at once, then idle), which causes visible UI hangs downstream.
+        Pacing with a monotonic scheduler matches the mock loop's smooth
+        cadence while letting the driver's deque absorb USB jitter.
         """
+        interval = 1.0 / getattr(self._hw, "sample_rate", SAMPLE_RATE)
+        next_t = time.monotonic()
         while not self._stop_event.is_set():
             sample = self._hw.read_sample()
             if sample is None:
-                time.sleep(SAMPLE_INTERVAL)
+                time.sleep(interval)
+                next_t = time.monotonic()  # avoid burst catch-up after starvation
                 continue
 
             sample = self._hampel.apply(sample)
@@ -252,3 +270,11 @@ class AcquisitionLoop:
                 "channels": sample,
             }
             self._loop.call_soon_threadsafe(self._enqueue, frame)
+
+            next_t += interval
+            delay = next_t - time.monotonic()
+            if delay > 0:
+                time.sleep(delay)
+            elif delay < -interval * 50:
+                # >100 ms behind — deque is overflowing; resync the schedule.
+                next_t = time.monotonic()
