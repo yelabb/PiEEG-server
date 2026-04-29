@@ -98,6 +98,42 @@ def _require_pyserial():
         sys.exit(1)
 
 
+def _list_available_ports() -> list[tuple[str, str]]:
+    """Return a list of (device, description) for every serial port we can see.
+
+    Used in error messages when the user picks a wrong port. Returns an empty
+    list if `pyserial` is missing or `list_ports` is unavailable.
+    """
+    try:
+        from serial.tools import list_ports  # type: ignore[import-not-found]
+    except Exception:
+        return []
+    try:
+        return [(p.device, p.description or "") for p in list_ports.comports()]
+    except Exception:  # pragma: no cover
+        return []
+
+
+def _format_port_hint(requested: str) -> str:
+    """Build a multi-line, user-friendly hint listing visible ports."""
+    ports = _list_available_ports()
+    if not ports:
+        return (
+            f"  Requested port: {requested}\n"
+            "  No serial ports detected. Plug in the IronBCI-32 USB cable\n"
+            "  and (on Windows) install the STM32 Virtual COM Port driver:\n"
+            "    https://www.st.com/en/development-tools/stsw-stm32102.html\n"
+        )
+    lines = [f"  Requested port: {requested}", "  Available serial ports:"]
+    for device, desc in ports:
+        lines.append(f"    {device:<12}  {desc}")
+    lines.append(
+        "\n  Pick the one that looks like an STM32 / USB Serial Device\n"
+        "  and pass it via --serial-port."
+    )
+    return "\n".join(lines) + "\n"
+
+
 def _decode_frame(frame: bytes) -> tuple[int, list[float]]:
     """Decode a full frame `[0xA0] [counter] [32×3 BE ch] [trailer...] [0xC0]`.
 
@@ -262,7 +298,40 @@ class IronBCI32Hardware:
             port.rts = False
         except Exception:  # pragma: no cover — some platforms reject pre-open writes
             pass
-        port.open()
+        try:
+            port.open()
+        except Exception as exc:
+            # Windows error 87 ("The parameter is incorrect") is usually one of:
+            #   1. The user picked a COM port that doesn't support 921600 baud
+            #      (Bluetooth modem, built-in COM1, …) — fatal, can't recover.
+            #   2. Some STM32 USB-CDC drivers reject SetCommState(921600) even
+            #      though USB-CDC ignores the baud rate at the wire level —
+            #      retrying with the driver's default baud succeeds and the
+            #      device streams normally.
+            msg = str(exc)
+            looks_like_param_error = (
+                "parameter is incorrect" in msg.lower()
+                or "error 87" in msg.lower()
+            )
+            if looks_like_param_error and self._baudrate != 9600:
+                logger.warning(
+                    "IronBCI-32: SetCommState(%d baud) rejected by driver — "
+                    "retrying with default baud (USB-CDC ignores it anyway)",
+                    self._baudrate,
+                )
+                try:
+                    port.baudrate = 9600
+                    port.open()
+                except Exception as exc2:  # pragma: no cover
+                    raise RuntimeError(
+                        f"Failed to open IronBCI-32 serial port: {exc2}\n\n"
+                        + _format_port_hint(self._serial_port)
+                    ) from exc2
+            else:
+                raise RuntimeError(
+                    f"Failed to open IronBCI-32 serial port: {exc}\n\n"
+                    + _format_port_hint(self._serial_port)
+                ) from exc
         self._port = port
         # Flush any stale bytes from a previous session.
         try:
