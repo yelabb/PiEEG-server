@@ -76,8 +76,15 @@ class PiEEGServer:
         self._noise_test_running = False
 
     def enable_filter(self, lowcut: float = 1.0, highcut: float = 40.0):
+        # Pass the *actual* hardware sample rate so SOS coefficients are
+        # designed for the right Nyquist. With the wrong fs (e.g. 250 Hz
+        # SOS run on 500 Hz IronBCI-32 data) the filter is grossly miscut
+        # and produces near-random noise.
         self._filter = MultichannelFilter(
-            num_channels=self._num_channels, lowcut=lowcut, highcut=highcut,
+            num_channels=self._num_channels,
+            lowcut=lowcut,
+            highcut=highcut,
+            fs=float(self._sample_rate()),
         )
 
     def _sample_rate(self) -> int:
